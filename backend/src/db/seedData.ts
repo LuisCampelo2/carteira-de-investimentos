@@ -177,6 +177,7 @@ export interface SeedCompany {
   qualitySummary: string
   priceSummary: string
   priceApprox?: string
+  priceValue?: number
   payoutFrequency?: string
 }
 
@@ -200,6 +201,7 @@ export const companies: SeedCompany[] = [
     pvp: 'P/VP historicamente próximo de 1,5x a 2x (exemplo educacional).',
     dividendYield: 'Dividend Yield ≈ 8,3% ao ano nos últimos 12 meses (pesquisado em ago/2026).',
     priceApprox: 'R$ 38,35 (19/ago/2026)',
+    priceValue: 38.35,
     payoutFrequency: 'Mensal — um dos poucos bancos que pagam todo mês, com complementos semestrais.',
     growth: 'Crescimento moderado, puxado por expansão da carteira de crédito e serviços digitais.',
     risks: ['Inadimplência em cenários de juros altos', 'Concorrência de bancos digitais', 'Regulação do setor financeiro', 'Ciclos econômicos'],
@@ -227,6 +229,7 @@ export const companies: SeedCompany[] = [
     pvp: 'P/VP historicamente abaixo de 1,5x (exemplo educacional).',
     dividendYield: 'Dividend Yield ≈ 7,3% ao ano nos últimos 12 meses (pesquisado em jul/2026), historicamente entre os mais altos da bolsa.',
     priceApprox: 'R$ 41,65 (21/jul/2026)',
+    priceValue: 41.65,
     payoutFrequency: 'Trimestral (política da empresa), podendo ter distribuições extras em anos de caixa forte.',
     growth: 'Crescimento ligado a novos poços do pré-sal e à evolução da produção, mais do que à expansão de mercado.',
     risks: ['Risco político (empresa estatal)', 'Volatilidade do preço do petróleo', 'Câmbio', 'Mudanças na política de preços e dividendos'],
@@ -254,6 +257,7 @@ export const companies: SeedCompany[] = [
     pvp: 'P/VP historicamente moderado (exemplo educacional).',
     dividendYield: 'Dividend Yield ≈ 7,8% ao ano nos últimos 12 meses (pesquisado em ago/2026).',
     priceApprox: 'R$ 71,55 (ago/2026)',
+    priceValue: 71.55,
     payoutFrequency: 'Semestral (pagamentos regulares em março e setembro), mais eventuais extraordinários.',
     growth: 'Crescimento ligado a expansão de produção e não necessariamente a novos mercados.',
     risks: ['Preço do minério de ferro', 'Dependência da economia chinesa', 'Riscos ambientais e de segurança operacional', 'Custos regulatórios após acidentes passados'],
@@ -281,6 +285,7 @@ export const companies: SeedCompany[] = [
     pvp: 'P/VP historicamente alto, também refletindo o prêmio de qualidade (exemplo educacional).',
     dividendYield: 'Dividend Yield ≈ 4,1% ao ano nos últimos 12 meses (pesquisado em ago/2026) — moderado, coerente com reinvestimento em crescimento.',
     priceApprox: 'R$ 48,44 (ago/2026)',
+    priceValue: 48.44,
     payoutFrequency: 'Semestral (historicamente em março e agosto), com eventuais pagamentos extras.',
     growth: 'Crescimento consistente ao longo de décadas, com forte disciplina de execução.',
     risks: ['Múltiplos historicamente elevados (valuation exigente)', 'Câmbio (parte relevante da receita vem de exportação)', 'Ciclo industrial global'],
@@ -308,6 +313,7 @@ export const companies: SeedCompany[] = [
     pvp: 'P/VP historicamente abaixo de 1x em vários períodos (exemplo educacional).',
     dividendYield: 'Dividend Yield ≈ 3,1% ao ano nos últimos 12 meses (ago/2026) — caiu de patamares mais altos após corte no payout.',
     priceApprox: 'R$ 18,12 (ago/2026)',
+    priceValue: 18.12,
     payoutFrequency: 'Trimestral (JCP antecipado por trimestre) mais complemento no fim do ano.',
     growth: 'Crescimento ligado à expansão do crédito, especialmente rural e para pequenas empresas.',
     risks: ['Risco político (empresa estatal)', 'Exposição concentrada ao agronegócio', 'Inadimplência em cenários de juros altos'],
@@ -335,6 +341,7 @@ export const companies: SeedCompany[] = [
     pvp: 'P/VP historicamente moderado (exemplo educacional).',
     dividendYield: 'Dividend Yield ≈ 5% a 8% ao ano nos últimos 12 meses, conforme a fonte (pesquisado em ago/2026).',
     priceApprox: 'R$ 27,61 (ago/2026)',
+    priceValue: 27.61,
     payoutFrequency: 'Cerca de 3x ao ano (historicamente fevereiro, maio e dezembro).',
     growth: 'Crescimento moderado, ligado a novos projetos de geração e leilões de energia.',
     risks: ['Regulação do setor elétrico', 'Renovação de concessões', 'Condições hidrológicas (regime de chuvas)'],
@@ -362,6 +369,7 @@ export const companies: SeedCompany[] = [
     pvp: 'P/VP historicamente moderado a elevado (exemplo educacional).',
     dividendYield: 'Dividend Yield ≈ 8,2% ao ano nos últimos 12 meses (ago/2026), dentro da faixa histórica de 8% a 12%.',
     priceApprox: 'R$ 37,30 (ago/2026)',
+    priceValue: 37.30,
     payoutFrequency: 'Cerca de 4x ao ano (historicamente janeiro, maio, agosto e novembro).',
     growth: 'Crescimento ligado à conquista de novos leilões de linhas de transmissão.',
     risks: ['Regulação do setor elétrico', 'Dependência de novos leilões para crescer', 'Endividamento para financiar novos ativos'],
@@ -389,6 +397,7 @@ export const companies: SeedCompany[] = [
     pvp: 'P/VP historicamente elevado (exemplo educacional).',
     dividendYield: 'Dividend Yield ≈ 6,1% ao ano nos últimos 12 meses (ago/2026).',
     priceApprox: 'R$ 33,40 (ago/2026)',
+    priceValue: 33.40,
     payoutFrequency: 'Cerca de 4x ao ano (aproximadamente trimestral, via JCP).',
     growth: 'Crescimento historicamente forte, com expansão de frota e consolidação do setor.',
     risks: ['Alto endividamento para financiar a frota', 'Sensibilidade a juros', 'Preço de veículos novos e usados'],
@@ -416,6 +425,7 @@ export const companies: SeedCompany[] = [
     pvp: 'P/VP historicamente elevado (exemplo educacional).',
     dividendYield: 'Dividend Yield ≈ 4,0% ao ano nos últimos 12 meses (ago/2026), combinado com recompras de ações.',
     priceApprox: 'R$ 14,95 (ago/2026)',
+    priceValue: 14.95,
     payoutFrequency: 'Trimestral (janeiro, abril, julho e outubro, aproximadamente).',
     growth: 'Crescimento ligado ao aumento do volume negociado na bolsa e à entrada de novos investidores no mercado de capitais brasileiro.',
     risks: ['Depende do volume de negociação do mercado', 'Concorrência de novas infraestruturas de negociação', 'Regulação do mercado de capitais'],

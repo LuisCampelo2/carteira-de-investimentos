@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Check, ChevronLeft, GripVertical, Plus, PiggyBank, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, GripVertical, Minus, Plus, PiggyBank, Sparkles, X } from 'lucide-react'
 import {
   ASSET_CLASSES,
   ASSET_CLASS_COLORS,
@@ -17,6 +17,11 @@ import { RefreshPricesButton } from '../ui/RefreshPricesButton'
 import { GrowthChart } from './GrowthChart'
 
 const objetivos = ['Aposentadoria', 'Reserva de longo prazo', 'Comprar um imóvel', 'Independência financeira', 'Outro']
+
+// Each class's monthly budget is split into this many equal shares ("cotas").
+// Selecting an asset spends one cota; once all cotas are spent, the class is
+// fully allocated and no more assets can be added to it without freeing one up.
+const MAX_ITEMS_PER_CLASS = 4
 
 const RISK_SUGGESTION_BY_OBJECTIVE: Partial<Record<(typeof objetivos)[number], RiskTolerance>> = {
   Aposentadoria: 'media',
@@ -44,15 +49,16 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
         description: c.whatItDoes,
         marketInfo: c.priceApprox,
         payoutFrequency: c.payoutFrequency,
+        price: c.priceValue,
       }))
     }
     return baseOptionsByClass[cls]
   }
 
   const [step, setStep] = useState<Step>('alocacao')
-  const [initial, setInitial] = useState(1000)
-  const [monthly, setMonthly] = useState(400)
-  const [years, setYears] = useState(5)
+  const [initial, setInitial] = useState(0)
+  const [monthly, setMonthly] = useState(0)
+  const [years, setYears] = useState(0)
   const [risk, setRisk] = useState<RiskTolerance>('media')
   const [objective, setObjective] = useState(objetivos[0])
   const [percents, setPercents] = useState<Record<AssetClass, number>>(() =>
@@ -60,8 +66,9 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   )
   const [addedClasses, setAddedClasses] = useState<AssetClass[]>([])
   const [dragOver, setDragOver] = useState(false)
-  const [selections, setSelections] = useState<Record<AssetClass, Set<string>>>(() =>
-    Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, new Set<string>()])) as Record<AssetClass, Set<string>>,
+  // Quantity of each asset id within its class (0 or missing = not in the cart).
+  const [quantities, setQuantities] = useState<Record<AssetClass, Record<string, number>>>(() =>
+    Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, {} as Record<string, number>])) as Record<AssetClass, Record<string, number>>,
   )
   const [customOptions, setCustomOptions] = useState<Record<AssetClass, InvestmentOption[]>>(() =>
     Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, [] as InvestmentOption[]])) as Record<AssetClass, InvestmentOption[]>,
@@ -75,28 +82,34 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   const addCustomOption = (cls: AssetClass) => {
     const name = customInput[cls].trim()
     if (!name) return
+    const classAmount = monthly * (percents[cls] / 100)
+    const cota = classAmount / MAX_ITEMS_PER_CLASS
+    const spent = classSpent(cls, allOptionsForClass(cls))
+    if (spent + cota > classAmount + 0.005) return
     const id = `custom-${cls}-${Date.now()}`
     setCustomOptions((prev) => ({
       ...prev,
       [cls]: [...prev[cls], { id, assetClass: cls, name, description: 'Investimento adicionado por você.' }],
     }))
-    setSelections((prev) => ({ ...prev, [cls]: new Set(prev[cls]).add(id) }))
+    setQuantities((prev) => ({ ...prev, [cls]: { ...prev[cls], [id]: 1 } }))
     setCustomInput((prev) => ({ ...prev, [cls]: '' }))
   }
 
   const removeCustomOption = (cls: AssetClass, id: string) => {
     setCustomOptions((prev) => ({ ...prev, [cls]: prev[cls].filter((o) => o.id !== id) }))
-    setSelections((prev) => {
-      const next = new Set(prev[cls])
-      next.delete(id)
+    setQuantities((prev) => {
+      const next = { ...prev[cls] }
+      delete next[id]
       return { ...prev, [cls]: next }
     })
   }
 
+  const classQuantity = (cls: AssetClass, id: string): number => quantities[cls][id] ?? 0
+
   const availableClasses = ASSET_CLASSES.filter((c) => !addedClasses.includes(c))
   const total = addedClasses.reduce((sum, c) => sum + (percents[c] || 0), 0)
   const activeClasses = addedClasses.filter((c) => percents[c] > 0)
-  const allActiveClassesHaveSelection = activeClasses.every((c) => selections[c].size > 0)
+  const allActiveClassesHaveSelection = activeClasses.every((c) => Object.values(quantities[c]).some((q) => q > 0))
 
   const points = useMemo(() => simulateGrowth(initial, monthly, years, risk), [initial, monthly, years, risk])
   const last = points[points.length - 1]
@@ -132,7 +145,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   const removeClass = (cls: AssetClass) => {
     setAddedClasses((prev) => prev.filter((c) => c !== cls))
     setPercents((prev) => ({ ...prev, [cls]: 0 }))
-    setSelections((prev) => ({ ...prev, [cls]: new Set() }))
+    setQuantities((prev) => ({ ...prev, [cls]: {} }))
   }
 
   const setPercent = (cls: AssetClass, value: number) => {
@@ -146,31 +159,54 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
     if (suggestion) applyPreset(suggestion)
   }
 
-  const toggleAsset = (cls: AssetClass, id: string) => {
-    setSelections((prev) => {
-      const next = new Set(prev[cls])
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return { ...prev, [cls]: next }
+  // Real unit price when we know it (stocks), otherwise an equal share of the
+  // class budget across MAX_ITEMS_PER_CLASS slots — see MAX_ITEMS_PER_CLASS.
+  const unitPrice = (cls: AssetClass, opt: InvestmentOption): number => {
+    if (opt.price != null) return opt.price
+    const classAmount = monthly * (percents[cls] / 100)
+    return classAmount / MAX_ITEMS_PER_CLASS
+  }
+
+  const classSpent = (cls: AssetClass, options: InvestmentOption[]): number => {
+    let sum = 0
+    for (const opt of options) {
+      const qty = classQuantity(cls, opt.id)
+      if (qty > 0) sum += unitPrice(cls, opt) * qty
+    }
+    return sum
+  }
+
+  const changeQuantity = (cls: AssetClass, id: string, delta: number) => {
+    const options = allOptionsForClass(cls)
+    const opt = options.find((o) => o.id === id)
+    if (!opt) return
+    setQuantities((prev) => {
+      const current = prev[cls][id] ?? 0
+      const next = current + delta
+      if (next < 0) return prev
+      if (delta > 0) {
+        const classAmount = monthly * (percents[cls] / 100)
+        const spent = classSpent(cls, options)
+        if (spent + unitPrice(cls, opt) > classAmount + 0.005) return prev
+      }
+      return { ...prev, [cls]: { ...prev[cls], [id]: next } }
     })
   }
 
   const confirm = () => {
     const items = activeClasses.flatMap((cls) => {
-      const classAmount = monthly * (percents[cls] / 100)
-      const ids = Array.from(selections[cls])
-      const perAsset = classAmount / ids.length
       const options = allOptionsForClass(cls)
-      return ids.map((id) => {
-        const opt = options.find((o) => o.id === id)!
-        return {
-          id: `${cls}:${id}`,
+      return options
+        .map((opt) => ({ opt, qty: classQuantity(cls, opt.id) }))
+        .filter(({ qty }) => qty > 0)
+        .map(({ opt, qty }) => ({
+          id: `${cls}:${opt.id}`,
           assetClass: cls,
           name: opt.name,
           ticker: opt.ticker,
-          monthlyAmount: perAsset,
-        }
-      })
+          quantity: qty,
+          monthlyAmount: unitPrice(cls, opt) * qty,
+        }))
     })
 
     onConfirm({
@@ -381,9 +417,14 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
           {activeClasses.map((cls) => {
             const options = allOptionsForClass(cls)
             const classAmount = monthly * (percents[cls] / 100)
+            const cota = classAmount / MAX_ITEMS_PER_CLASS
+            const spent = classSpent(cls, options)
+            const remaining = Math.max(0, classAmount - spent)
+            const fullyAllocated = remaining < 0.005
+            const hasAnyQty = Object.values(quantities[cls]).some((q) => q > 0)
             return (
               <div key={cls} className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-4">
-                <div className="mb-3 flex items-center justify-between">
+                <div className="mb-1 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
                     <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: ASSET_CLASS_COLORS[cls] }} />
                     {cls}
@@ -392,37 +433,72 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                     {percents[cls]}% · {formatBRL(classAmount)}/mês
                   </span>
                 </div>
+                <div className="mb-3 flex items-center justify-between text-xs">
+                  <span className="text-slate-500">
+                    {options.some((o) => o.price != null)
+                      ? 'Desconta o preço real × quantidade de cada ativo'
+                      : `${formatBRL(cota)} por unidade escolhida`}
+                  </span>
+                  <span className={`font-medium ${fullyAllocated ? 'text-emerald-400' : 'text-slate-400'}`}>
+                    Restante: {formatBRL(remaining)}
+                  </span>
+                </div>
+                {fullyAllocated && (
+                  <p className="mb-2 text-xs text-amber-300">
+                    Valor da classe totalmente distribuído. Reduza a quantidade de um ativo para ajustar outro.
+                  </p>
+                )}
                 <div className="grid gap-2 sm:grid-cols-2">
                   {options.map((opt) => {
-                    const selected = selections[cls].has(opt.id)
+                    const qty = classQuantity(cls, opt.id)
                     const isCustom = opt.id.startsWith('custom-')
+                    const unit = unitPrice(cls, opt)
+                    const canIncrement = remaining >= unit - 0.005
                     return (
                       <div
                         key={opt.id}
                         className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-left transition-colors ${
-                          selected ? 'border-sky-500 bg-sky-500/10' : 'border-slate-700 hover:border-slate-600'
+                          qty > 0 ? 'border-sky-500 bg-sky-500/10' : 'border-slate-700 hover:border-slate-600'
                         }`}
                       >
-                        <button onClick={() => toggleAsset(cls, opt.id)} className="flex flex-1 items-start gap-2 text-left">
-                          <span
-                            className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                              selected ? 'border-sky-500 bg-sky-500' : 'border-slate-600'
-                            }`}
-                          >
-                            {selected && <Check size={11} className="text-white" />}
-                          </span>
-                          <span>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between gap-2">
                             <span className="block text-sm font-medium text-slate-200">
                               {opt.name}
                               {opt.ticker && opt.ticker !== opt.name && <span className="ml-1 text-xs text-slate-500">({opt.ticker})</span>}
                             </span>
-                            <span className="block text-xs text-slate-500">{opt.description}</span>
-                            {opt.marketInfo && <span className="mt-0.5 block text-xs text-sky-400">{opt.marketInfo}</span>}
-                            {opt.payoutFrequency && (
-                              <span className="mt-0.5 block text-xs text-emerald-400">Recebe: {opt.payoutFrequency}</span>
+                            {qty > 0 && (
+                              <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+                                -{formatBRL(unit * qty)}
+                              </span>
                             )}
-                          </span>
-                        </button>
+                          </div>
+                          <span className="block text-xs text-slate-500">{opt.description}</span>
+                          {opt.marketInfo && <span className="mt-0.5 block text-xs text-sky-400">{opt.marketInfo}</span>}
+                          {opt.payoutFrequency && (
+                            <span className="mt-0.5 block text-xs text-emerald-400">Recebe: {opt.payoutFrequency}</span>
+                          )}
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              onClick={() => changeQuantity(cls, opt.id, -1)}
+                              disabled={qty === 0}
+                              aria-label={`Diminuir quantidade de ${opt.name}`}
+                              className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-slate-300 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-30"
+                            >
+                              <Minus size={12} />
+                            </button>
+                            <span className="w-5 text-center text-sm font-medium text-slate-200">{qty}</span>
+                            <button
+                              onClick={() => changeQuantity(cls, opt.id, 1)}
+                              disabled={!canIncrement}
+                              aria-label={`Aumentar quantidade de ${opt.name}`}
+                              className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-slate-300 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-30"
+                            >
+                              <Plus size={12} />
+                            </button>
+                            <span className="text-xs text-slate-500">{formatBRL(unit)}/un.</span>
+                          </div>
+                        </div>
                         {isCustom && (
                           <button
                             onClick={() => removeCustomOption(cls, opt.id)}
@@ -447,20 +523,21 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                         addCustomOption(cls)
                       }
                     }}
-                    placeholder="Adicionar meu próprio investimento..."
-                    className="flex-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-1.5 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-sky-500"
+                    disabled={remaining < cota - 0.005}
+                    placeholder={remaining < cota - 0.005 ? 'Valor da classe já totalmente distribuído' : 'Adicionar meu próprio investimento...'}
+                    className="flex-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-1.5 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
                   />
                   <button
                     onClick={() => addCustomOption(cls)}
-                    disabled={!customInput[cls].trim()}
+                    disabled={!customInput[cls].trim() || remaining < cota - 0.005}
                     className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Plus size={13} /> Adicionar
                   </button>
                 </div>
 
-                {selections[cls].size === 0 && (
-                  <p className="mt-2 text-xs text-amber-300">Selecione ao menos um ativo desta classe (ou adicione o seu).</p>
+                {!hasAnyQty && (
+                  <p className="mt-2 text-xs text-amber-300">Escolha a quantidade de ao menos um ativo desta classe (ou adicione o seu).</p>
                 )}
               </div>
             )
@@ -498,26 +575,35 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
             </div>
             <div className="mt-4 space-y-3">
               {activeClasses.map((cls) => {
-                const ids = Array.from(selections[cls])
                 const classAmount = monthly * (percents[cls] / 100)
-                const perAsset = classAmount / ids.length
                 const options = allOptionsForClass(cls)
+                const selectedOptions = options.filter((o) => classQuantity(cls, o.id) > 0)
+                const spent = classSpent(cls, options)
+                const unallocated = classAmount - spent
                 return (
                   <div key={cls}>
                     <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide" style={{ color: ASSET_CLASS_COLORS[cls] }}>
                       {cls} — {percents[cls]}%
                     </div>
                     <ul className="space-y-1">
-                      {ids.map((id) => {
-                        const opt = options.find((o) => o.id === id)!
+                      {selectedOptions.map((opt) => {
+                        const qty = classQuantity(cls, opt.id)
                         return (
-                          <li key={id} className="flex items-center justify-between rounded-lg bg-slate-800/40 px-3 py-1.5 text-sm text-slate-300">
-                            <span>{opt.name}</span>
-                            <span className="text-slate-500">{formatBRL(perAsset)}/mês</span>
+                          <li key={opt.id} className="flex items-center justify-between rounded-lg bg-slate-800/40 px-3 py-1.5 text-sm text-slate-300">
+                            <span>
+                              {opt.name}
+                              {qty > 1 && <span className="ml-1 text-xs text-slate-500">×{qty}</span>}
+                            </span>
+                            <span className="text-slate-500">{formatBRL(unitPrice(cls, opt) * qty)}/mês</span>
                           </li>
                         )
                       })}
                     </ul>
+                    {unallocated > 0.005 && (
+                      <p className="mt-1 text-xs text-amber-300">
+                        {formatBRL(unallocated)}/mês desta classe ainda não foram atribuídos a nenhum ativo.
+                      </p>
+                    )}
                   </div>
                 )
               })}

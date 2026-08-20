@@ -1,4 +1,4 @@
-import { BookOpen, PiggyBank, TrendingUp } from 'lucide-react'
+import { ArrowLeft, BookOpen, PiggyBank, TrendingUp } from 'lucide-react'
 import { SearchBar } from '../Search/SearchBar'
 
 export function Header({
@@ -20,13 +20,23 @@ export function Header({
 }) {
   return (
     <header className="flex flex-col gap-3 border-b border-slate-800 bg-slate-950/80 px-4 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-6">
-      <button onClick={onGoHome} className="text-left" disabled={!onGoHome}>
-        <div className="flex items-center gap-2">
-          <TrendingUp size={20} className="text-sky-400" />
-          <h1 className="text-lg font-bold text-slate-50">Investimentos em Ações</h1>
-        </div>
-        <p className="text-xs text-slate-500">Do zero à sua primeira carteira</p>
-      </button>
+      <div className="flex items-center gap-3">
+        {onGoHome && (
+          <button
+            onClick={onGoHome}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/80 px-2.5 py-1.5 text-xs font-medium text-slate-300 hover:border-slate-500 hover:text-slate-100"
+          >
+            <ArrowLeft size={14} /> Voltar
+          </button>
+        )}
+        <button onClick={onGoHome} className="text-left" disabled={!onGoHome}>
+          <div className="flex items-center gap-2">
+            <TrendingUp size={20} className="text-sky-400" />
+            <h1 className="text-lg font-bold text-slate-50">Investimentos em Ações</h1>
+          </div>
+          <p className="text-xs text-slate-500">Do zero à sua primeira carteira</p>
+        </button>
+      </div>
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 sm:gap-4">
         <span>{total} aulas</span>

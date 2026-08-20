@@ -48,6 +48,7 @@ companiesRouter.get('/', async (_req, res) => {
       qualitySummary: row.quality_summary,
       priceSummary: row.price_summary,
       priceApprox: row.price_approx ?? undefined,
+      priceValue: row.price_value != null ? Number(row.price_value) : undefined,
       payoutFrequency: row.payout_frequency ?? undefined,
     })),
   )

@@ -4,6 +4,7 @@ export interface CarteiraItem {
   name: string
   ticker?: string
   monthlyAmount: number
+  quantity?: number
 }
 
 export interface CarteiraState {

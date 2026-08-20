@@ -53,6 +53,7 @@ export interface CarteiraItem {
   name: string
   ticker?: string
   monthlyAmount: number
+  quantity?: number
 }
 
 export interface CarteiraState {
@@ -73,6 +74,9 @@ export interface InvestmentOption {
   description: string
   marketInfo?: string
   payoutFrequency?: string
+  /** Real price per share/unit in R$, when known (e.g. stocks). Used to deduct
+   * the actual value from the class budget instead of an even split. */
+  price?: number
 }
 
 export interface Company {
@@ -100,5 +104,6 @@ export interface Company {
   qualitySummary: string
   priceSummary: string
   priceApprox?: string
+  priceValue?: number
   payoutFrequency?: string
 }

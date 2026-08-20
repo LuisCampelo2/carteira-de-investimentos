@@ -58,3 +58,9 @@ ALTER TABLE investment_options ADD COLUMN IF NOT EXISTS market_info text;
 ALTER TABLE investment_options ADD COLUMN IF NOT EXISTS payout_frequency text;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS price_approx text;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS payout_frequency text;
+
+-- Numeric price, in R$ per share, kept alongside price_approx (a formatted
+-- display string like "R$ 38,35 (19/ago/2026)"). The portfolio simulator
+-- needs the actual number to deduct the right amount when a stock is picked;
+-- price_approx alone can't be parsed reliably for that.
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS price_value numeric;

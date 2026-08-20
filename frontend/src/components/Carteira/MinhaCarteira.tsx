@@ -135,6 +135,7 @@ export function MinhaCarteira({
                           <span className="text-slate-200">
                             {item.name}
                             {item.ticker && item.ticker !== item.name && <span className="ml-1 text-xs text-slate-500">({item.ticker})</span>}
+                            {item.quantity != null && item.quantity > 1 && <span className="ml-1 text-xs text-slate-500">×{item.quantity}</span>}
                           </span>
                           <span className="flex items-center gap-3">
                             <span className="text-slate-500">{formatBRL(item.monthlyAmount)}/mês</span>

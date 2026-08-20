@@ -89,23 +89,32 @@ marketDataRouter.post('/refresh', async (_req, res) => {
   const brapiToken = process.env.BRAPI_TOKEN
   if (brapiToken) {
     try {
+      // O plano gratuito do brapi.dev permite só 1 ativo por requisição, então busca uma por vez.
       const { rows: companies } = await pool.query('SELECT id, ticker FROM companies')
-      const tickers = companies.map((c) => c.ticker).join(',')
-      const brapiRes = await fetch(`https://brapi.dev/api/v2/stocks/quote?symbols=${tickers}`, {
-        headers: { Authorization: `Bearer ${brapiToken}` },
-      })
-      if (!brapiRes.ok) throw new Error(`brapi.dev respondeu ${brapiRes.status}`)
-      const brapiData = (await brapiRes.json()) as { results?: { symbol: string; regularMarketPrice: number }[] }
-      for (const quote of brapiData.results ?? []) {
-        const company = companies.find((c) => c.ticker === quote.symbol)
-        if (company && typeof quote.regularMarketPrice === 'number') {
-          await pool.query('UPDATE companies SET price_approx = $1 WHERE id = $2', [
-            `R$ ${formatBRL(quote.regularMarketPrice)} (${tag})`,
-            company.id,
-          ])
+      let okCount = 0
+      const stockErrors: string[] = []
+      for (const company of companies) {
+        try {
+          const brapiRes = await fetch(`https://brapi.dev/api/v2/stocks/quote?symbols=${company.ticker}`, {
+            headers: { Authorization: `Bearer ${brapiToken}` },
+          })
+          if (!brapiRes.ok) throw new Error(`status ${brapiRes.status}`)
+          const brapiData = (await brapiRes.json()) as { results?: { data?: { regularMarketPrice: number } }[] }
+          const price = brapiData.results?.[0]?.data?.regularMarketPrice
+          if (typeof price === 'number') {
+            await pool.query('UPDATE companies SET price_approx = $1, price_value = $2 WHERE id = $3', [
+              `R$ ${formatBRL(price)} (${tag})`,
+              price,
+              company.id,
+            ])
+            okCount++
+          }
+        } catch (err) {
+          stockErrors.push(`${company.ticker} (${(err as Error).message})`)
         }
       }
-      updated.push('Preço das ações (brapi.dev)')
+      if (okCount > 0) updated.push(`Preço de ${okCount} ação(ões) (brapi.dev)`)
+      if (stockErrors.length > 0) errors.push(`Ações não atualizadas: ${stockErrors.join(', ')}.`)
     } catch (err) {
       errors.push(`Ações (brapi.dev): ${(err as Error).message}`)
     }
