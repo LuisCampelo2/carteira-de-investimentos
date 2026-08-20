@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertTriangle, Building2, CheckCircle2, CircleAlert, XCircle } from 'lucide-react'
-import { empresas } from '../../data/empresas'
+import { useCompanies } from '../../hooks/useCompanies'
 import type { Company } from '../../data/types'
 
 function StatRow({ label, value }: { label: string; value: string }) {
@@ -102,8 +102,22 @@ function CompanyDetail({ company }: { company: Company }) {
 }
 
 export function CompanyAnalyzer() {
-  const [selectedId, setSelectedId] = useState<string>(empresas[0].id)
-  const selected = empresas.find((e) => e.id === selectedId) ?? empresas[0]
+  const { companies, loading } = useCompanies()
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!selectedId && companies.length > 0) setSelectedId(companies[0].id)
+  }, [companies, selectedId])
+
+  const selected = companies.find((e) => e.id === selectedId)
+
+  if (loading) {
+    return <p className="text-sm text-slate-400">Carregando empresas...</p>
+  }
+
+  if (!selected) {
+    return <p className="text-sm text-slate-400">Nenhuma empresa cadastrada.</p>
+  }
 
   return (
     <div className="space-y-4">
@@ -112,7 +126,7 @@ export function CompanyAnalyzer() {
         Selecione uma empresa
       </div>
       <div className="flex flex-wrap gap-2">
-        {empresas.map((company) => (
+        {companies.map((company) => (
           <button
             key={company.id}
             onClick={() => setSelectedId(company.id)}

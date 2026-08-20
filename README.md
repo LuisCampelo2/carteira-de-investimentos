@@ -1,32 +1,51 @@
-# React + TypeScript + Vite
+# Mapa Mental Interativo de Investimentos
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Monorepo com duas partes:
 
-Currently, two official plugins are available:
+- `frontend/` — React + Vite + TypeScript (o mapa mental, aulas, simulador de carteira).
+- `backend/` — Node + Express + PostgreSQL (persiste a Minha Carteira, o progresso das aulas, e os dados de investimentos/empresas).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Pré-requisitos
 
-## React Compiler
+- Node.js
+- PostgreSQL rodando localmente (sem Docker)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Configuração inicial
 
-## Expanding the Oxlint configuration
+1. Instalar dependências (na raiz, cobre os dois workspaces):
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+   ```
+   npm install
+   ```
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+2. Criar o banco e copiar as variáveis de ambiente do backend:
+
+   ```
+   createdb mapa_mental_investimento
+   cp backend/.env.example backend/.env
+   ```
+
+   Edite `backend/.env` com o usuário/senha do seu Postgres local.
+
+3. Aplicar o schema e popular os dados de investimentos/empresas:
+
+   ```
+   npm run db:migrate
+   npm run db:seed
+   ```
+
+   `db:seed` é idempotente (upsert por id) — pode rodar de novo sempre que os dados em `backend/src/db/seedData.ts` mudarem.
+
+## Rodando em desenvolvimento
+
+```
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Sobe o frontend (`http://localhost:5173` por padrão) e o backend (`http://localhost:3001`) juntos. Para rodar cada um separado: `npm run dev:frontend` / `npm run dev:backend`.
+
+## Build
+
+```
+npm run build
+```

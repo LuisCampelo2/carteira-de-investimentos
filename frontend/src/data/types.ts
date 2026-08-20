@@ -65,6 +65,14 @@ export interface CarteiraState {
   updatedAt: string
 }
 
+export interface InvestmentOption {
+  id: string
+  assetClass: string
+  name: string
+  ticker?: string
+  description: string
+}
+
 export interface Company {
   id: string
   name: string

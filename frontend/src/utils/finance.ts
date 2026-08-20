@@ -1,14 +1,35 @@
 export type RiskTolerance = 'baixa' | 'media' | 'alta'
 
-export type AssetClass = 'Renda fixa' | 'ETFs' | 'Ações' | 'FIIs'
+export type AssetClass =
+  | 'Renda fixa'
+  | 'ETFs'
+  | 'Ações'
+  | 'FIIs'
+  | 'Fundos Multimercado'
+  | 'Previdência Privada'
+  | 'Debêntures'
+  | 'Criptomoedas'
 
-export const ASSET_CLASSES: AssetClass[] = ['Renda fixa', 'ETFs', 'Ações', 'FIIs']
+export const ASSET_CLASSES: AssetClass[] = [
+  'Renda fixa',
+  'ETFs',
+  'Ações',
+  'FIIs',
+  'Fundos Multimercado',
+  'Previdência Privada',
+  'Debêntures',
+  'Criptomoedas',
+]
 
 export const ASSET_CLASS_COLORS: Record<AssetClass, string> = {
   'Renda fixa': 'var(--color-brand-4)',
   ETFs: 'var(--color-brand-2)',
   Ações: 'var(--color-brand-1)',
   FIIs: 'var(--color-brand-5)',
+  'Fundos Multimercado': 'var(--color-brand-3)',
+  'Previdência Privada': 'var(--color-brand-8)',
+  Debêntures: 'var(--color-brand-10)',
+  Criptomoedas: 'var(--color-brand-6)',
 }
 
 export interface Allocation {
@@ -18,9 +39,36 @@ export interface Allocation {
 }
 
 const PRESETS: Record<RiskTolerance, Record<AssetClass, number>> = {
-  baixa: { 'Renda fixa': 65, ETFs: 20, Ações: 10, FIIs: 5 },
-  alta: { 'Renda fixa': 15, ETFs: 30, Ações: 45, FIIs: 10 },
-  media: { 'Renda fixa': 40, ETFs: 25, Ações: 20, FIIs: 15 },
+  baixa: {
+    'Renda fixa': 45,
+    ETFs: 10,
+    Ações: 5,
+    FIIs: 10,
+    'Fundos Multimercado': 5,
+    'Previdência Privada': 15,
+    Debêntures: 10,
+    Criptomoedas: 0,
+  },
+  media: {
+    'Renda fixa': 25,
+    ETFs: 15,
+    Ações: 15,
+    FIIs: 15,
+    'Fundos Multimercado': 10,
+    'Previdência Privada': 10,
+    Debêntures: 8,
+    Criptomoedas: 2,
+  },
+  alta: {
+    'Renda fixa': 5,
+    ETFs: 20,
+    Ações: 35,
+    FIIs: 10,
+    'Fundos Multimercado': 10,
+    'Previdência Privada': 0,
+    Debêntures: 5,
+    Criptomoedas: 15,
+  },
 }
 
 export function getAllocationPreset(risk: RiskTolerance): Record<AssetClass, number> {
@@ -32,7 +80,7 @@ export function getAllocation(risk: RiskTolerance): Allocation[] {
   return ASSET_CLASSES.map((label) => ({ label, percent: preset[label], color: ASSET_CLASS_COLORS[label] }))
 }
 
-const ANNUAL_RATE_BY_RISK: Record<RiskTolerance, number> = {
+export const ANNUAL_RATE_BY_RISK: Record<RiskTolerance, number> = {
   baixa: 0.08,
   media: 0.1,
   alta: 0.12,

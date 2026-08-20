@@ -1,6 +1,75 @@
-import type { Company } from './types'
+export interface SeedInvestmentOption {
+  id: string
+  assetClass: string
+  name: string
+  ticker?: string
+  description: string
+}
 
-export const empresas: Company[] = [
+export const investmentOptions: SeedInvestmentOption[] = [
+  // ETFs
+  { id: 'bova11', assetClass: 'ETFs', name: 'BOVA11', ticker: 'BOVA11', description: 'ETF que busca acompanhar o Ibovespa, principal índice da bolsa brasileira.' },
+  { id: 'ivvb11', assetClass: 'ETFs', name: 'IVVB11', ticker: 'IVVB11', description: 'ETF que busca acompanhar o S&P 500, principal índice de ações dos EUA.' },
+  { id: 'smal11', assetClass: 'ETFs', name: 'SMAL11', ticker: 'SMAL11', description: 'ETF que acompanha um índice de empresas brasileiras de menor capitalização (small caps).' },
+  { id: 'divo11', assetClass: 'ETFs', name: 'DIVO11', ticker: 'DIVO11', description: 'ETF que acompanha um índice de empresas boas pagadoras de dividendos na B3.' },
+
+  // Renda fixa
+  { id: 'tesouro-selic', assetClass: 'Renda fixa', name: 'Tesouro Selic', description: 'Título público pós-fixado atrelado à Selic, indicado para reserva de emergência pela alta liquidez.' },
+  { id: 'tesouro-ipca', assetClass: 'Renda fixa', name: 'Tesouro IPCA+', description: 'Título público que paga inflação (IPCA) mais uma taxa fixa, indicado para objetivos de longo prazo.' },
+  { id: 'cdb', assetClass: 'Renda fixa', name: 'CDB', description: 'Certificado de Depósito Bancário, título privado de bancos, geralmente atrelado a um percentual do CDI.' },
+  { id: 'lci-lca', assetClass: 'Renda fixa', name: 'LCI/LCA', description: 'Letras de crédito imobiliário/agrícola, isentas de Imposto de Renda para pessoa física.' },
+
+  // FIIs
+  { id: 'hglg11', assetClass: 'FIIs', name: 'HGLG11', ticker: 'HGLG11', description: 'Fundo imobiliário de galpões logísticos.' },
+  { id: 'knri11', assetClass: 'FIIs', name: 'KNRI11', ticker: 'KNRI11', description: 'Fundo imobiliário híbrido, com imóveis corporativos e logísticos.' },
+  { id: 'mxrf11', assetClass: 'FIIs', name: 'MXRF11', ticker: 'MXRF11', description: 'Fundo imobiliário de recebíveis (papel), focado em títulos ligados ao mercado imobiliário.' },
+
+  // Fundos Multimercado
+  { id: 'multi-macro', assetClass: 'Fundos Multimercado', name: 'Fundo Multimercado Macro', description: 'Aposta em cenários econômicos amplos, combinando juros, câmbio e bolsa.' },
+  { id: 'multi-long-short', assetClass: 'Fundos Multimercado', name: 'Fundo Multimercado Long Short', description: 'Compra e vende ações simultaneamente buscando lucrar com a diferença entre elas, com menor exposição ao mercado.' },
+  { id: 'multi-livre', assetClass: 'Fundos Multimercado', name: 'Fundo Multimercado Livre', description: 'Liberdade para alocar em diversas classes de ativos conforme a visão do gestor.' },
+
+  // Previdência Privada
+  { id: 'pgbl', assetClass: 'Previdência Privada', name: 'PGBL', description: 'Plano de previdência indicado para quem declara Imposto de Renda completo, permite deduzir até 12% da renda tributável.' },
+  { id: 'vgbl', assetClass: 'Previdência Privada', name: 'VGBL', description: 'Plano de previdência indicado para quem declara IR simplificado ou é isento, sem benefício de dedução.' },
+
+  // Debêntures
+  { id: 'debenture-incentivada', assetClass: 'Debêntures', name: 'Debênture Incentivada', description: 'Título de dívida privada isento de Imposto de Renda para pessoa física, usado para financiar projetos de infraestrutura.' },
+  { id: 'debenture-comum', assetClass: 'Debêntures', name: 'Debênture Comum', description: 'Título de dívida emitido por empresas para captar recursos, com tributação regressiva de Imposto de Renda.' },
+
+  // Criptomoedas
+  { id: 'bitcoin', assetClass: 'Criptomoedas', name: 'Bitcoin', ticker: 'BTC', description: 'Criptomoeda pioneira e mais valorizada do mercado, usada como reserva de valor digital.' },
+  { id: 'ethereum', assetClass: 'Criptomoedas', name: 'Ethereum', ticker: 'ETH', description: 'Segunda maior criptomoeda, base de contratos inteligentes e aplicações descentralizadas.' },
+  { id: 'stablecoin', assetClass: 'Criptomoedas', name: 'Stablecoin (USDT/USDC)', description: 'Criptomoedas atreladas ao dólar, usadas para reduzir a volatilidade dentro do mercado cripto.' },
+]
+
+export interface SeedCompany {
+  id: string
+  name: string
+  ticker: string
+  sector: string
+  whatItDoes: string
+  howItMakesMoney: string
+  revenue: string
+  profit: string
+  margin: string
+  roe: string
+  debt: string
+  cashFlow: string
+  pl: string
+  pvp: string
+  dividendYield: string
+  growth: string
+  risks: string[]
+  outlook: string
+  positives: string[]
+  attention: string[]
+  dangers: string[]
+  qualitySummary: string
+  priceSummary: string
+}
+
+export const companies: SeedCompany[] = [
   {
     id: 'itau',
     name: 'Itaú Unibanco',

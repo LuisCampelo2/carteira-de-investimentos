@@ -12,11 +12,9 @@ import { getAulaById } from './data/aulas'
 
 type Drawer = { type: 'aula'; aulaId: string; conceptId?: string } | { type: 'glossary' } | { type: 'carteira' } | null
 
-const AULA_10_ID = 'aula-10'
-
 export default function App() {
   const { getStatus, setStatus, markStarted, completedCount, total } = useProgress()
-  const { carteira, saveCarteira, removeItem } = useCarteira()
+  const { carteira, saveCarteira, removeItem, clearCarteira } = useCarteira()
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const [drawer, setDrawer] = useState<Drawer>(null)
 
@@ -90,7 +88,13 @@ export default function App() {
               )}
               {drawer?.type === 'glossary' && <GlossaryView onClose={closeDrawer} />}
               {drawer?.type === 'carteira' && (
-                <MinhaCarteira carteira={carteira} onClose={closeDrawer} onRemoveItem={removeItem} onGoToSimulator={() => openAula(AULA_10_ID)} />
+                <MinhaCarteira
+                  carteira={carteira}
+                  onClose={closeDrawer}
+                  onRemoveItem={removeItem}
+                  onSaveCarteira={saveCarteira}
+                  onClearCarteira={clearCarteira}
+                />
               )}
             </div>
           </div>

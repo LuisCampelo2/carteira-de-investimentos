@@ -1,20 +1,24 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { AlertTriangle, PiggyBank, Trash2, X } from 'lucide-react'
 import type { CarteiraState } from '../../data/types'
 import { ASSET_CLASSES, ASSET_CLASS_COLORS, formatBRL, simulateGrowth, type RiskTolerance } from '../../utils/finance'
 import { GrowthChart } from '../PortfolioSimulator/GrowthChart'
+import { PortfolioSimulator } from '../PortfolioSimulator/PortfolioSimulator'
 
 export function MinhaCarteira({
   carteira,
   onClose,
   onRemoveItem,
-  onGoToSimulator,
+  onSaveCarteira,
+  onClearCarteira,
 }: {
   carteira: CarteiraState | null
   onClose: () => void
   onRemoveItem: (itemId: string) => void
-  onGoToSimulator: () => void
+  onSaveCarteira: (carteira: CarteiraState) => void
+  onClearCarteira: () => void
 }) {
+  const [showSimulator, setShowSimulator] = useState(false)
   const totalMonthly = useMemo(() => carteira?.items.reduce((sum, i) => sum + i.monthlyAmount, 0) ?? 0, [carteira])
 
   const percentByClass = useMemo(() => {
@@ -38,24 +42,48 @@ export function MinhaCarteira({
         <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-100">
           <PiggyBank size={18} className="text-emerald-400" /> Minha Carteira
         </h2>
-        <button onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200">
-          <X size={18} />
-        </button>
+        <div className="flex items-center gap-1">
+          {carteira && carteira.items.length > 0 && (
+            <button
+              onClick={() => {
+                if (confirm('Limpar toda a Minha Carteira?')) onClearCarteira()
+              }}
+              className="shrink-0 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-800 hover:text-rose-400"
+            >
+              Limpar carteira
+            </button>
+          )}
+          <button onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200">
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {!carteira || carteira.items.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-            <PiggyBank size={32} className="text-slate-600" />
-            <p className="max-w-xs text-sm text-slate-400">
-              Você ainda não montou sua carteira. Vá até a Aula 10 para simular seu aporte e escolher seus investimentos.
-            </p>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-400">Monte sua carteira simulando abaixo o seu aporte e escolhendo seus investimentos.</p>
+            <PortfolioSimulator
+              onConfirm={(next) => {
+                onSaveCarteira(next)
+                setShowSimulator(false)
+              }}
+            />
+          </div>
+        ) : showSimulator ? (
+          <div className="space-y-4">
             <button
-              onClick={onGoToSimulator}
-              className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-400"
+              onClick={() => setShowSimulator(false)}
+              className="text-xs font-medium text-slate-400 hover:text-slate-200"
             >
-              Ir para o simulador (Aula 10)
+              ← Voltar para a carteira
             </button>
+            <PortfolioSimulator
+              onConfirm={(next) => {
+                onSaveCarteira(next)
+                setShowSimulator(false)
+              }}
+            />
           </div>
         ) : (
           <div className="space-y-5">
@@ -125,10 +153,10 @@ export function MinhaCarteira({
             </div>
 
             <button
-              onClick={onGoToSimulator}
+              onClick={() => setShowSimulator(true)}
               className="w-full rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 hover:border-slate-500"
             >
-              Refazer simulação (Aula 10)
+              Refazer simulação
             </button>
           </div>
         )}
