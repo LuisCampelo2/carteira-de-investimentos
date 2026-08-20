@@ -5,17 +5,20 @@ import { MobileTree } from './components/MindMap/MobileTree'
 import { LessonPanel } from './components/LessonPanel/LessonPanel'
 import { GlossaryView } from './components/Glossary/GlossaryView'
 import { MinhaCarteira } from './components/Carteira/MinhaCarteira'
+import { Home } from './pages/Home'
 import { useProgress } from './hooks/useProgress'
 import { useCarteira } from './hooks/useCarteira'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { getAulaById } from './data/aulas'
 
 type Drawer = { type: 'aula'; aulaId: string; conceptId?: string } | { type: 'glossary' } | { type: 'carteira' } | null
+type View = 'home' | 'app'
 
 export default function App() {
   const { getStatus, setStatus, markStarted, completedCount, total } = useProgress()
   const { carteira, saveCarteira, removeItem, clearCarteira } = useCarteira()
   const isDesktop = useMediaQuery('(min-width: 768px)')
+  const [view, setView] = useState<View>('home')
   const [drawer, setDrawer] = useState<Drawer>(null)
 
   const openAula = useCallback(
@@ -38,6 +41,26 @@ export default function App() {
   const openCarteira = useCallback(() => setDrawer({ type: 'carteira' }), [])
   const closeDrawer = useCallback(() => setDrawer(null), [])
 
+  const goHome = useCallback(() => {
+    setDrawer(null)
+    setView('home')
+  }, [])
+
+  const goToMapa = useCallback(() => {
+    setDrawer(null)
+    setView('app')
+  }, [])
+
+  const goToGlossario = useCallback(() => {
+    setView('app')
+    openGlossary()
+  }, [openGlossary])
+
+  const goToCarteira = useCallback(() => {
+    setView('app')
+    openCarteira()
+  }, [openCarteira])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeDrawer()
@@ -49,6 +72,21 @@ export default function App() {
   const activeAula = drawer?.type === 'aula' ? getAulaById(drawer.aulaId) : undefined
   const drawerOpen = drawer !== null
 
+  if (view === 'home') {
+    return (
+      <div className="h-screen w-screen overflow-hidden bg-slate-950 text-slate-200">
+        <Home
+          completed={completedCount}
+          total={total}
+          carteiraCount={carteira?.items.length ?? 0}
+          onOpenMapa={goToMapa}
+          onOpenGlossario={goToGlossario}
+          onOpenCarteira={goToCarteira}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-200">
       <Header
@@ -58,6 +96,7 @@ export default function App() {
         onSelectSearch={openConcept}
         onOpenGlossary={openGlossary}
         onOpenCarteira={openCarteira}
+        onGoHome={goHome}
       />
 
       <div className="relative flex-1 overflow-hidden">

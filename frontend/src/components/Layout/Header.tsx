@@ -8,6 +8,7 @@ export function Header({
   onSelectSearch,
   onOpenGlossary,
   onOpenCarteira,
+  onGoHome,
 }: {
   completed: number
   total: number
@@ -15,16 +16,17 @@ export function Header({
   onSelectSearch: (aulaId: string, conceptId: string) => void
   onOpenGlossary: () => void
   onOpenCarteira: () => void
+  onGoHome?: () => void
 }) {
   return (
     <header className="flex flex-col gap-3 border-b border-slate-800 bg-slate-950/80 px-4 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-6">
-      <div>
+      <button onClick={onGoHome} className="text-left" disabled={!onGoHome}>
         <div className="flex items-center gap-2">
           <TrendingUp size={20} className="text-sky-400" />
           <h1 className="text-lg font-bold text-slate-50">Investimentos em Ações</h1>
         </div>
         <p className="text-xs text-slate-500">Do zero à sua primeira carteira</p>
-      </div>
+      </button>
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 sm:gap-4">
         <span>{total} aulas</span>

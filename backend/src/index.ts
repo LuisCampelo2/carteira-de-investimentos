@@ -4,6 +4,7 @@ import cors from 'cors'
 import { carteiraRouter } from './routes/carteira.js'
 import { progressRouter } from './routes/progress.js'
 import { investmentOptionsRouter, companiesRouter } from './routes/investments.js'
+import { marketDataRouter } from './routes/marketData.js'
 
 const app = express()
 const port = Number(process.env.PORT ?? 3001)
@@ -16,6 +17,7 @@ app.use('/api/carteira', carteiraRouter)
 app.use('/api/progress', progressRouter)
 app.use('/api/investment-options', investmentOptionsRouter)
 app.use('/api/companies', companiesRouter)
+app.use('/api/market-data', marketDataRouter)
 
 app.listen(port, () => {
   console.log(`Backend rodando em http://localhost:${port}`)

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Building2, CheckCircle2, CircleAlert, XCircle } from 'lucide-react'
 import { useCompanies } from '../../hooks/useCompanies'
+import { RefreshPricesButton } from '../ui/RefreshPricesButton'
 import type { Company } from '../../data/types'
 
 function StatRow({ label, value }: { label: string; value: string }) {
@@ -29,6 +30,8 @@ function CompanyDetail({ company }: { company: Company }) {
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {company.priceApprox && <StatRow label="Preço aproximado" value={company.priceApprox} />}
+        {company.payoutFrequency && <StatRow label="Frequência de pagamento" value={company.payoutFrequency} />}
         <StatRow label="Receita" value={company.revenue} />
         <StatRow label="Lucro" value={company.profit} />
         <StatRow label="Margem" value={company.margin} />
@@ -95,14 +98,17 @@ function CompanyDetail({ company }: { company: Company }) {
 
       <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-200">
         <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-400" />
-        <span>Dados apresentados são exemplos educacionais, não cotações em tempo real. Não constituem recomendação de investimento.</span>
+        <span>
+          Preço, P/L e Dividend Yield são valores aproximados pesquisados em ago/2026 — não são cotações em tempo real e mudam
+          diariamente. Rentabilidade passada não garante rentabilidade futura. Não constituem recomendação de investimento.
+        </span>
       </div>
     </div>
   )
 }
 
 export function CompanyAnalyzer() {
-  const { companies, loading } = useCompanies()
+  const { companies, loading, refetch } = useCompanies()
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -121,6 +127,8 @@ export function CompanyAnalyzer() {
 
   return (
     <div className="space-y-4">
+      <RefreshPricesButton onRefreshed={refetch} />
+
       <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
         <Building2 size={16} />
         Selecione uma empresa

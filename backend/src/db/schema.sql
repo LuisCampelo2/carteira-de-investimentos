@@ -21,7 +21,9 @@ CREATE TABLE IF NOT EXISTS investment_options (
   asset_class text NOT NULL,
   name text NOT NULL,
   ticker text,
-  description text NOT NULL
+  description text NOT NULL,
+  market_info text,
+  payout_frequency text
 );
 
 CREATE TABLE IF NOT EXISTS companies (
@@ -47,5 +49,12 @@ CREATE TABLE IF NOT EXISTS companies (
   attention jsonb NOT NULL DEFAULT '[]',
   dangers jsonb NOT NULL DEFAULT '[]',
   quality_summary text NOT NULL,
-  price_summary text NOT NULL
+  price_summary text NOT NULL,
+  price_approx text,
+  payout_frequency text
 );
+
+ALTER TABLE investment_options ADD COLUMN IF NOT EXISTS market_info text;
+ALTER TABLE investment_options ADD COLUMN IF NOT EXISTS payout_frequency text;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS price_approx text;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS payout_frequency text;

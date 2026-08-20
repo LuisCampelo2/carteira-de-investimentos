@@ -13,6 +13,7 @@ import {
 import type { CarteiraState, InvestmentOption } from '../../data/types'
 import { useInvestmentOptions } from '../../hooks/useInvestmentOptions'
 import { useCompanies } from '../../hooks/useCompanies'
+import { RefreshPricesButton } from '../ui/RefreshPricesButton'
 import { GrowthChart } from './GrowthChart'
 
 const objetivos = ['Aposentadoria', 'Reserva de longo prazo', 'Comprar um imóvel', 'Independência financeira', 'Outro']
@@ -26,15 +27,24 @@ const RISK_SUGGESTION_BY_OBJECTIVE: Partial<Record<(typeof objetivos)[number], R
 
 type Step = 'alocacao' | 'ativos' | 'resumo'
 
+const STEPS: Step[] = ['alocacao', 'ativos', 'resumo']
 const STEP_LABELS: Record<Step, string> = { alocacao: '1. Alocação', ativos: '2. Ativos', resumo: '3. Carteira' }
 
 export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: CarteiraState) => void }) {
-  const { byClass: baseOptionsByClass, loading: optionsLoading } = useInvestmentOptions()
-  const { companies, loading: companiesLoading } = useCompanies()
+  const { byClass: baseOptionsByClass, loading: optionsLoading, refetch: refetchOptions } = useInvestmentOptions()
+  const { companies, loading: companiesLoading, refetch: refetchCompanies } = useCompanies()
 
   const optionsForClass = (cls: AssetClass): InvestmentOption[] => {
     if (cls === 'Ações') {
-      return companies.map((c) => ({ id: c.id, assetClass: 'Ações', name: c.name, ticker: c.ticker, description: c.whatItDoes }))
+      return companies.map((c) => ({
+        id: c.id,
+        assetClass: 'Ações',
+        name: c.name,
+        ticker: c.ticker,
+        description: c.whatItDoes,
+        marketInfo: c.priceApprox,
+        payoutFrequency: c.payoutFrequency,
+      }))
     }
     return baseOptionsByClass[cls]
   }
@@ -177,11 +187,26 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-        {(['alocacao', 'ativos', 'resumo'] as Step[]).map((s) => (
-          <span key={s} className={`rounded-full px-2.5 py-1 ${step === s ? 'bg-sky-500/20 text-sky-300' : 'bg-slate-800/60'}`}>
-            {STEP_LABELS[s]}
-          </span>
-        ))}
+        {STEPS.map((s, i) => {
+          const canGoBack = i < STEPS.indexOf(step)
+          return (
+            <button
+              key={s}
+              type="button"
+              disabled={!canGoBack}
+              onClick={() => setStep(s)}
+              className={`rounded-full px-2.5 py-1 transition-colors ${
+                step === s
+                  ? 'bg-sky-500/20 text-sky-300'
+                  : canGoBack
+                    ? 'bg-slate-800/60 text-slate-400 hover:bg-slate-700/60 hover:text-slate-200'
+                    : 'cursor-not-allowed bg-slate-800/60 text-slate-500'
+              }`}
+            >
+              {STEP_LABELS[s]}
+            </button>
+          )
+        })}
       </div>
 
       {step === 'alocacao' && (
@@ -339,21 +364,6 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
             )}
           </div>
 
-          <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-4">
-            <div className="mb-3 text-sm font-medium text-slate-300">Projeção de crescimento (simulação educacional)</div>
-            <GrowthChart points={points} />
-            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-              <div className="rounded-lg border border-slate-700/50 px-3 py-2">
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">Total aportado</div>
-                <div className="text-slate-200">{formatBRL(last.invested)}</div>
-              </div>
-              <div className="rounded-lg border border-slate-700/50 px-3 py-2">
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">Projeção final</div>
-                <div className="text-slate-200">{formatBRL(last.projected)}</div>
-              </div>
-            </div>
-          </div>
-
           <button
             onClick={() => setStep('ativos')}
             disabled={total !== 100 || optionsLoading || companiesLoading}
@@ -366,6 +376,8 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
 
       {step === 'ativos' && (
         <div className="animate-fade-in space-y-5">
+          <RefreshPricesButton onRefreshed={() => Promise.all([refetchOptions(), refetchCompanies()])} />
+
           {activeClasses.map((cls) => {
             const options = allOptionsForClass(cls)
             const classAmount = monthly * (percents[cls] / 100)
@@ -405,6 +417,10 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                               {opt.ticker && opt.ticker !== opt.name && <span className="ml-1 text-xs text-slate-500">({opt.ticker})</span>}
                             </span>
                             <span className="block text-xs text-slate-500">{opt.description}</span>
+                            {opt.marketInfo && <span className="mt-0.5 block text-xs text-sky-400">{opt.marketInfo}</span>}
+                            {opt.payoutFrequency && (
+                              <span className="mt-0.5 block text-xs text-emerald-400">Recebe: {opt.payoutFrequency}</span>
+                            )}
                           </span>
                         </button>
                         {isCustom && (
@@ -511,7 +527,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
           <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-4">
             <div className="mb-3 text-sm font-medium text-slate-300">Projeção de crescimento (simulação educacional)</div>
             <GrowthChart points={points} />
-            <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
               <div className="rounded-lg border border-slate-700/50 px-3 py-2">
                 <div className="text-[11px] uppercase tracking-wide text-slate-500">Total aportado</div>
                 <div className="text-slate-200">{formatBRL(last.invested)}</div>
@@ -523,6 +539,12 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
               <div className="rounded-lg border border-slate-700/50 px-3 py-2">
                 <div className="text-[11px] uppercase tracking-wide text-slate-500">Objetivo</div>
                 <div className="text-slate-200">{objective}</div>
+              </div>
+              <div className="rounded-lg border border-slate-700/50 px-3 py-2">
+                <div className="text-[11px] uppercase tracking-wide text-slate-500">Risco (usado na projeção)</div>
+                <div className="text-slate-200 capitalize">
+                  {risk === 'media' ? 'Média' : risk} · ≈{(ANNUAL_RATE_BY_RISK[risk] * 100).toFixed(0)}% a.a.
+                </div>
               </div>
             </div>
           </div>

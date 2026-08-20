@@ -4,43 +4,152 @@ export interface SeedInvestmentOption {
   name: string
   ticker?: string
   description: string
+  marketInfo?: string
+  payoutFrequency?: string
 }
 
+// Dados de mercado pesquisados em 20/08/2026. São aproximados, mudam diariamente
+// e não são garantia de rentabilidade futura — apenas referência educacional.
 export const investmentOptions: SeedInvestmentOption[] = [
   // ETFs
-  { id: 'bova11', assetClass: 'ETFs', name: 'BOVA11', ticker: 'BOVA11', description: 'ETF que busca acompanhar o Ibovespa, principal índice da bolsa brasileira.' },
-  { id: 'ivvb11', assetClass: 'ETFs', name: 'IVVB11', ticker: 'IVVB11', description: 'ETF que busca acompanhar o S&P 500, principal índice de ações dos EUA.' },
-  { id: 'smal11', assetClass: 'ETFs', name: 'SMAL11', ticker: 'SMAL11', description: 'ETF que acompanha um índice de empresas brasileiras de menor capitalização (small caps).' },
-  { id: 'divo11', assetClass: 'ETFs', name: 'DIVO11', ticker: 'DIVO11', description: 'ETF que acompanha um índice de empresas boas pagadoras de dividendos na B3.' },
+  {
+    id: 'bova11', assetClass: 'ETFs', name: 'BOVA11', ticker: 'BOVA11',
+    description: 'ETF que busca acompanhar o Ibovespa, principal índice da bolsa brasileira.',
+    marketInfo: 'Ibovespa acumula ≈ +23% em 12 meses (ago/2026).',
+    payoutFrequency: 'Não distribui — dividendos das empresas da carteira são reinvestidos na cota.',
+  },
+  {
+    id: 'ivvb11', assetClass: 'ETFs', name: 'IVVB11', ticker: 'IVVB11',
+    description: 'ETF que busca acompanhar o S&P 500, principal índice de ações dos EUA.',
+    marketInfo: 'S&P 500 subiu ≈ +10% só no 1º semestre de 2026 (retorno total).',
+    payoutFrequency: 'Não distribui — dividendos das empresas da carteira são reinvestidos na cota.',
+  },
+  {
+    id: 'smal11', assetClass: 'ETFs', name: 'SMAL11', ticker: 'SMAL11',
+    description: 'ETF que acompanha um índice de empresas brasileiras de menor capitalização (small caps).',
+    marketInfo: 'Índice Small Caps acumula ≈ -3,3% em 12 meses (ago/2026) — mais volátil que o Ibovespa.',
+    payoutFrequency: 'Não distribui — dividendos das empresas da carteira são reinvestidos na cota.',
+  },
+  {
+    id: 'divo11', assetClass: 'ETFs', name: 'DIVO11', ticker: 'DIVO11',
+    description: 'ETF que acompanha um índice de empresas boas pagadoras de dividendos na B3.',
+    marketInfo: 'Índice de Dividendos acumula ≈ +22% em 12 meses (ago/2026).',
+    payoutFrequency: 'Não distribui — dividendos das empresas da carteira são reinvestidos na cota.',
+  },
 
   // Renda fixa
-  { id: 'tesouro-selic', assetClass: 'Renda fixa', name: 'Tesouro Selic', description: 'Título público pós-fixado atrelado à Selic, indicado para reserva de emergência pela alta liquidez.' },
-  { id: 'tesouro-ipca', assetClass: 'Renda fixa', name: 'Tesouro IPCA+', description: 'Título público que paga inflação (IPCA) mais uma taxa fixa, indicado para objetivos de longo prazo.' },
-  { id: 'cdb', assetClass: 'Renda fixa', name: 'CDB', description: 'Certificado de Depósito Bancário, título privado de bancos, geralmente atrelado a um percentual do CDI.' },
-  { id: 'lci-lca', assetClass: 'Renda fixa', name: 'LCI/LCA', description: 'Letras de crédito imobiliário/agrícola, isentas de Imposto de Renda para pessoa física.' },
+  {
+    id: 'tesouro-selic', assetClass: 'Renda fixa', name: 'Tesouro Selic',
+    description: 'Título público pós-fixado atrelado à Selic, indicado para reserva de emergência pela alta liquidez.',
+    marketInfo: 'Selic atual: 14,00% a.a. (Copom, ago/2026).',
+    payoutFrequency: 'Sem pagamento periódico — rende diariamente e só é recebido no resgate ou vencimento.',
+  },
+  {
+    id: 'tesouro-ipca', assetClass: 'Renda fixa', name: 'Tesouro IPCA+',
+    description: 'Título público que paga inflação (IPCA) mais uma taxa fixa, indicado para objetivos de longo prazo.',
+    marketInfo: 'IPCA acumulado 12 meses: ≈ 4,44% (jul/2026), mais a taxa fixa do título.',
+    payoutFrequency: 'Sem pagamento periódico (salvo a versão "com juros semestrais") — geralmente recebido só no vencimento.',
+  },
+  {
+    id: 'cdb', assetClass: 'Renda fixa', name: 'CDB',
+    description: 'Certificado de Depósito Bancário, título privado de bancos, geralmente atrelado a um percentual do CDI.',
+    marketInfo: 'CDI atual ≈ 13,90% a.a.; CDBs de bancos médios oferecem ≈ 100% a 120% do CDI (ago/2026).',
+    payoutFrequency: 'Sem pagamento periódico na maioria dos casos — rende no período e é recebido no vencimento ou resgate.',
+  },
+  {
+    id: 'lci-lca', assetClass: 'Renda fixa', name: 'LCI/LCA',
+    description: 'Letras de crédito imobiliário/agrícola, isentas de Imposto de Renda para pessoa física.',
+    marketInfo: 'Costumam pagar 85% a 95% do CDI (≈13,90% a.a.), mas isentas de IR — rendimento líquido pode superar CDB.',
+    payoutFrequency: 'Sem pagamento periódico — rendimento é recebido no vencimento ou resgate.',
+  },
 
   // FIIs
-  { id: 'hglg11', assetClass: 'FIIs', name: 'HGLG11', ticker: 'HGLG11', description: 'Fundo imobiliário de galpões logísticos.' },
-  { id: 'knri11', assetClass: 'FIIs', name: 'KNRI11', ticker: 'KNRI11', description: 'Fundo imobiliário híbrido, com imóveis corporativos e logísticos.' },
-  { id: 'mxrf11', assetClass: 'FIIs', name: 'MXRF11', ticker: 'MXRF11', description: 'Fundo imobiliário de recebíveis (papel), focado em títulos ligados ao mercado imobiliário.' },
+  {
+    id: 'hglg11', assetClass: 'FIIs', name: 'HGLG11', ticker: 'HGLG11',
+    description: 'Fundo imobiliário de galpões logísticos.',
+    marketInfo: 'Dividend yield ≈ 8,4% em 12 meses (ago/2026).',
+    payoutFrequency: 'Mensal (como a maioria dos FIIs).',
+  },
+  {
+    id: 'knri11', assetClass: 'FIIs', name: 'KNRI11', ticker: 'KNRI11',
+    description: 'Fundo imobiliário híbrido, com imóveis corporativos e logísticos.',
+    marketInfo: 'Dividend yield ≈ 7,4% em 12 meses (ago/2026).',
+    payoutFrequency: 'Mensal (como a maioria dos FIIs).',
+  },
+  {
+    id: 'mxrf11', assetClass: 'FIIs', name: 'MXRF11', ticker: 'MXRF11',
+    description: 'Fundo imobiliário de recebíveis (papel), focado em títulos ligados ao mercado imobiliário.',
+    marketInfo: 'Dividend yield ≈ 12,3% em 12 meses (ago/2026) — mais alto, mas fundo de papel tende a ser mais sensível a juros.',
+    payoutFrequency: 'Mensal (como a maioria dos FIIs).',
+  },
 
   // Fundos Multimercado
-  { id: 'multi-macro', assetClass: 'Fundos Multimercado', name: 'Fundo Multimercado Macro', description: 'Aposta em cenários econômicos amplos, combinando juros, câmbio e bolsa.' },
-  { id: 'multi-long-short', assetClass: 'Fundos Multimercado', name: 'Fundo Multimercado Long Short', description: 'Compra e vende ações simultaneamente buscando lucrar com a diferença entre elas, com menor exposição ao mercado.' },
-  { id: 'multi-livre', assetClass: 'Fundos Multimercado', name: 'Fundo Multimercado Livre', description: 'Liberdade para alocar em diversas classes de ativos conforme a visão do gestor.' },
+  {
+    id: 'multi-macro', assetClass: 'Fundos Multimercado', name: 'Fundo Multimercado Macro',
+    description: 'Aposta em cenários econômicos amplos, combinando juros, câmbio e bolsa.',
+    marketInfo: 'Retorno varia muito de fundo para fundo — não há uma taxa de mercado única para comparar.',
+    payoutFrequency: 'Geralmente não distribui — ganho vem da valorização da cota (fundo de acumulação).',
+  },
+  {
+    id: 'multi-long-short', assetClass: 'Fundos Multimercado', name: 'Fundo Multimercado Long Short',
+    description: 'Compra e vende ações simultaneamente buscando lucrar com a diferença entre elas, com menor exposição ao mercado.',
+    marketInfo: 'Retorno varia muito de fundo para fundo — não há uma taxa de mercado única para comparar.',
+    payoutFrequency: 'Geralmente não distribui — ganho vem da valorização da cota (fundo de acumulação).',
+  },
+  {
+    id: 'multi-livre', assetClass: 'Fundos Multimercado', name: 'Fundo Multimercado Livre',
+    description: 'Liberdade para alocar em diversas classes de ativos conforme a visão do gestor.',
+    marketInfo: 'Retorno varia muito de fundo para fundo — não há uma taxa de mercado única para comparar.',
+    payoutFrequency: 'Geralmente não distribui — ganho vem da valorização da cota (fundo de acumulação).',
+  },
 
   // Previdência Privada
-  { id: 'pgbl', assetClass: 'Previdência Privada', name: 'PGBL', description: 'Plano de previdência indicado para quem declara Imposto de Renda completo, permite deduzir até 12% da renda tributável.' },
-  { id: 'vgbl', assetClass: 'Previdência Privada', name: 'VGBL', description: 'Plano de previdência indicado para quem declara IR simplificado ou é isento, sem benefício de dedução.' },
+  {
+    id: 'pgbl', assetClass: 'Previdência Privada', name: 'PGBL',
+    description: 'Plano de previdência indicado para quem declara Imposto de Renda completo, permite deduzir até 12% da renda tributável.',
+    marketInfo: 'Rentabilidade depende do fundo escolhido dentro do plano — varia como um fundo comum.',
+    payoutFrequency: 'Não distribui na fase de acumulação — só é recebido no resgate ou na aposentadoria.',
+  },
+  {
+    id: 'vgbl', assetClass: 'Previdência Privada', name: 'VGBL',
+    description: 'Plano de previdência indicado para quem declara IR simplificado ou é isento, sem benefício de dedução.',
+    marketInfo: 'Rentabilidade depende do fundo escolhido dentro do plano — varia como um fundo comum.',
+    payoutFrequency: 'Não distribui na fase de acumulação — só é recebido no resgate ou na aposentadoria.',
+  },
 
   // Debêntures
-  { id: 'debenture-incentivada', assetClass: 'Debêntures', name: 'Debênture Incentivada', description: 'Título de dívida privada isento de Imposto de Renda para pessoa física, usado para financiar projetos de infraestrutura.' },
-  { id: 'debenture-comum', assetClass: 'Debêntures', name: 'Debênture Comum', description: 'Título de dívida emitido por empresas para captar recursos, com tributação regressiva de Imposto de Renda.' },
+  {
+    id: 'debenture-incentivada', assetClass: 'Debêntures', name: 'Debênture Incentivada',
+    description: 'Título de dívida privada isento de Imposto de Renda para pessoa física, usado para financiar projetos de infraestrutura.',
+    marketInfo: 'Costumam pagar IPCA + 6% a 8% a.a. isento de IR (ago/2026).',
+    payoutFrequency: 'Varia por emissão — comumente semestral, podendo ser mensal, trimestral ou só no vencimento.',
+  },
+  {
+    id: 'debenture-comum', assetClass: 'Debêntures', name: 'Debênture Comum',
+    description: 'Título de dívida emitido por empresas para captar recursos, com tributação regressiva de Imposto de Renda.',
+    marketInfo: 'Costumam pagar CDI + 1,5% a 3% a.a., com IR regressivo sobre o rendimento.',
+    payoutFrequency: 'Varia por emissão — comumente semestral, podendo ser mensal, trimestral ou só no vencimento.',
+  },
 
   // Criptomoedas
-  { id: 'bitcoin', assetClass: 'Criptomoedas', name: 'Bitcoin', ticker: 'BTC', description: 'Criptomoeda pioneira e mais valorizada do mercado, usada como reserva de valor digital.' },
-  { id: 'ethereum', assetClass: 'Criptomoedas', name: 'Ethereum', ticker: 'ETH', description: 'Segunda maior criptomoeda, base de contratos inteligentes e aplicações descentralizadas.' },
-  { id: 'stablecoin', assetClass: 'Criptomoedas', name: 'Stablecoin (USDT/USDC)', description: 'Criptomoedas atreladas ao dólar, usadas para reduzir a volatilidade dentro do mercado cripto.' },
+  {
+    id: 'bitcoin', assetClass: 'Criptomoedas', name: 'Bitcoin', ticker: 'BTC',
+    description: 'Criptomoeda pioneira e mais valorizada do mercado, usada como reserva de valor digital.',
+    marketInfo: '≈ US$ 64.900 (19/ago/2026), em mercado de baixa desde fev/2026 — alta volatilidade.',
+    payoutFrequency: 'Não paga nada — ganho vem só da valorização (ou desvalorização) do preço.',
+  },
+  {
+    id: 'ethereum', assetClass: 'Criptomoedas', name: 'Ethereum', ticker: 'ETH',
+    description: 'Segunda maior criptomoeda, base de contratos inteligentes e aplicações descentralizadas.',
+    marketInfo: '≈ US$ 1.936 (19/ago/2026), também em mercado de baixa — alta volatilidade.',
+    payoutFrequency: 'Não paga nada por padrão — ganho vem da valorização (staking é uma exceção não coberta aqui).',
+  },
+  {
+    id: 'stablecoin', assetClass: 'Criptomoedas', name: 'Stablecoin (USDT/USDC)',
+    description: 'Criptomoedas atreladas ao dólar, usadas para reduzir a volatilidade dentro do mercado cripto.',
+    marketInfo: '≈ US$ 1,00 por definição (paridade com o dólar) — não é feita para valorizar.',
+    payoutFrequency: 'Não paga nada — não é feita para gerar renda, só para preservar valor em dólar.',
+  },
 ]
 
 export interface SeedCompany {
@@ -67,8 +176,12 @@ export interface SeedCompany {
   dangers: string[]
   qualitySummary: string
   priceSummary: string
+  priceApprox?: string
+  payoutFrequency?: string
 }
 
+// Preço e dividend yield pesquisados em 19-21/ago/2026. São aproximados, mudam
+// diariamente e rentabilidade passada não garante rentabilidade futura.
 export const companies: SeedCompany[] = [
   {
     id: 'itau',
@@ -85,7 +198,9 @@ export const companies: SeedCompany[] = [
     cashFlow: 'Geração de caixa operacional robusta, típica de bancos de grande porte (exemplo educacional).',
     pl: 'P/L historicamente na faixa de 7x a 10x (exemplo educacional).',
     pvp: 'P/VP historicamente próximo de 1,5x a 2x (exemplo educacional).',
-    dividendYield: 'Dividend Yield historicamente na faixa de 4% a 6% ao ano (exemplo educacional).',
+    dividendYield: 'Dividend Yield ≈ 8,3% ao ano nos últimos 12 meses (pesquisado em ago/2026).',
+    priceApprox: 'R$ 38,35 (19/ago/2026)',
+    payoutFrequency: 'Mensal — um dos poucos bancos que pagam todo mês, com complementos semestrais.',
     growth: 'Crescimento moderado, puxado por expansão da carteira de crédito e serviços digitais.',
     risks: ['Inadimplência em cenários de juros altos', 'Concorrência de bancos digitais', 'Regulação do setor financeiro', 'Ciclos econômicos'],
     outlook: 'Perspectivas ligadas ao crescimento do crédito no Brasil e à digitalização dos serviços financeiros.',
@@ -110,7 +225,9 @@ export const companies: SeedCompany[] = [
     cashFlow: 'Forte geração de caixa operacional em ciclos de petróleo em alta.',
     pl: 'P/L historicamente baixo em comparação a outros setores, refletindo o risco político e a volatilidade do setor (exemplo educacional).',
     pvp: 'P/VP historicamente abaixo de 1,5x (exemplo educacional).',
-    dividendYield: 'Dividend Yield historicamente entre os mais altos da bolsa brasileira, mas variável conforme a política de dividendos vigente (exemplo educacional).',
+    dividendYield: 'Dividend Yield ≈ 7,3% ao ano nos últimos 12 meses (pesquisado em jul/2026), historicamente entre os mais altos da bolsa.',
+    priceApprox: 'R$ 41,65 (21/jul/2026)',
+    payoutFrequency: 'Trimestral (política da empresa), podendo ter distribuições extras em anos de caixa forte.',
     growth: 'Crescimento ligado a novos poços do pré-sal e à evolução da produção, mais do que à expansão de mercado.',
     risks: ['Risco político (empresa estatal)', 'Volatilidade do preço do petróleo', 'Câmbio', 'Mudanças na política de preços e dividendos'],
     outlook: 'Perspectivas ligadas à produção do pré-sal, preço internacional do petróleo e transição energética de longo prazo.',
@@ -133,9 +250,11 @@ export const companies: SeedCompany[] = [
     roe: 'ROE historicamente volátil, atingindo picos altos em ciclos de minério em alta (exemplo educacional).',
     debt: 'Dívida líquida historicamente controlada, com política de disciplina de capital nos últimos anos (exemplo educacional).',
     cashFlow: 'Forte geração de caixa em ciclos de minério em alta, usada para dividendos e recompras.',
-    pl: 'P/L historicamente baixo em comparação com o mercado, refletindo a natureza cíclica do negócio (exemplo educacional).',
+    pl: 'P/L ≈ 29,3 (pesquisado em ago/2026) — acima da média histórica, também reflete a forte alta da cotação em 12 meses (≈+41%).',
     pvp: 'P/VP historicamente moderado (exemplo educacional).',
-    dividendYield: 'Dividend Yield historicamente alto em ciclos favoráveis de preço do minério (exemplo educacional).',
+    dividendYield: 'Dividend Yield ≈ 7,8% ao ano nos últimos 12 meses (pesquisado em ago/2026).',
+    priceApprox: 'R$ 71,55 (ago/2026)',
+    payoutFrequency: 'Semestral (pagamentos regulares em março e setembro), mais eventuais extraordinários.',
     growth: 'Crescimento ligado a expansão de produção e não necessariamente a novos mercados.',
     risks: ['Preço do minério de ferro', 'Dependência da economia chinesa', 'Riscos ambientais e de segurança operacional', 'Custos regulatórios após acidentes passados'],
     outlook: 'Perspectivas ligadas à demanda global por aço, infraestrutura chinesa e transição para minérios de maior qualidade.',
@@ -160,7 +279,9 @@ export const companies: SeedCompany[] = [
     cashFlow: 'Boa geração de caixa operacional, sustentando investimentos e dividendos.',
     pl: 'P/L historicamente elevado em relação à média do mercado, refletindo a percepção de qualidade da empresa (exemplo educacional).',
     pvp: 'P/VP historicamente alto, também refletindo o prêmio de qualidade (exemplo educacional).',
-    dividendYield: 'Dividend Yield historicamente moderado, já que parte relevante do lucro é reinvestida em crescimento (exemplo educacional).',
+    dividendYield: 'Dividend Yield ≈ 4,1% ao ano nos últimos 12 meses (pesquisado em ago/2026) — moderado, coerente com reinvestimento em crescimento.',
+    priceApprox: 'R$ 48,44 (ago/2026)',
+    payoutFrequency: 'Semestral (historicamente em março e agosto), com eventuais pagamentos extras.',
     growth: 'Crescimento consistente ao longo de décadas, com forte disciplina de execução.',
     risks: ['Múltiplos historicamente elevados (valuation exigente)', 'Câmbio (parte relevante da receita vem de exportação)', 'Ciclo industrial global'],
     outlook: 'Perspectivas ligadas à eletrificação industrial, energia renovável e expansão internacional.',
@@ -183,9 +304,11 @@ export const companies: SeedCompany[] = [
     roe: 'ROE historicamente competitivo com bancos privados em anos recentes (exemplo educacional).',
     debt: 'Estrutura de capital regulada pelo Banco Central, como os demais bancos.',
     cashFlow: 'Geração de caixa operacional robusta, típica de bancos de grande porte.',
-    pl: 'P/L historicamente mais baixo que bancos privados, refletindo o desconto por ser estatal (exemplo educacional).',
+    pl: 'P/L ≈ 8,55 (pesquisado em ago/2026), descontado frente aos bancos privados.',
     pvp: 'P/VP historicamente abaixo de 1x em vários períodos (exemplo educacional).',
-    dividendYield: 'Dividend Yield historicamente entre os mais altos do setor bancário (exemplo educacional).',
+    dividendYield: 'Dividend Yield ≈ 3,1% ao ano nos últimos 12 meses (ago/2026) — caiu de patamares mais altos após corte no payout.',
+    priceApprox: 'R$ 18,12 (ago/2026)',
+    payoutFrequency: 'Trimestral (JCP antecipado por trimestre) mais complemento no fim do ano.',
     growth: 'Crescimento ligado à expansão do crédito, especialmente rural e para pequenas empresas.',
     risks: ['Risco político (empresa estatal)', 'Exposição concentrada ao agronegócio', 'Inadimplência em cenários de juros altos'],
     outlook: 'Perspectivas ligadas ao crédito rural, à digitalização e à política de dividendos do governo.',
@@ -210,7 +333,9 @@ export const companies: SeedCompany[] = [
     cashFlow: 'Geração de caixa previsível, sustentando uma política de dividendos consistente.',
     pl: 'P/L historicamente moderado, condizente com um setor de baixo crescimento e alta previsibilidade (exemplo educacional).',
     pvp: 'P/VP historicamente moderado (exemplo educacional).',
-    dividendYield: 'Dividend Yield historicamente elevado, um dos destaques do setor elétrico (exemplo educacional).',
+    dividendYield: 'Dividend Yield ≈ 5% a 8% ao ano nos últimos 12 meses, conforme a fonte (pesquisado em ago/2026).',
+    priceApprox: 'R$ 27,61 (ago/2026)',
+    payoutFrequency: 'Cerca de 3x ao ano (historicamente fevereiro, maio e dezembro).',
     growth: 'Crescimento moderado, ligado a novos projetos de geração e leilões de energia.',
     risks: ['Regulação do setor elétrico', 'Renovação de concessões', 'Condições hidrológicas (regime de chuvas)'],
     outlook: 'Perspectivas ligadas à expansão de energias renováveis e à demanda futura de energia no Brasil.',
@@ -235,7 +360,9 @@ export const companies: SeedCompany[] = [
     cashFlow: 'Geração de caixa previsível, sustentando uma das maiores políticas de distribuição de dividendos da bolsa.',
     pl: 'P/L historicamente moderado (exemplo educacional).',
     pvp: 'P/VP historicamente moderado a elevado (exemplo educacional).',
-    dividendYield: 'Dividend Yield historicamente um dos mais altos da bolsa brasileira (exemplo educacional).',
+    dividendYield: 'Dividend Yield ≈ 8,2% ao ano nos últimos 12 meses (ago/2026), dentro da faixa histórica de 8% a 12%.',
+    priceApprox: 'R$ 37,30 (ago/2026)',
+    payoutFrequency: 'Cerca de 4x ao ano (historicamente janeiro, maio, agosto e novembro).',
     growth: 'Crescimento ligado à conquista de novos leilões de linhas de transmissão.',
     risks: ['Regulação do setor elétrico', 'Dependência de novos leilões para crescer', 'Endividamento para financiar novos ativos'],
     outlook: 'Perspectivas ligadas a novos leilões de transmissão e à expansão da malha elétrica brasileira.',
@@ -258,9 +385,11 @@ export const companies: SeedCompany[] = [
     roe: 'ROE historicamente elevado em períodos favoráveis do ciclo de crédito e preço de carros (exemplo educacional).',
     debt: 'Endividamento historicamente elevado, natural do modelo de negócio intensivo em capital (financiamento da frota) (exemplo educacional).',
     cashFlow: 'Fluxo de caixa fortemente influenciado pelo ciclo de compra e venda de veículos.',
-    pl: 'P/L historicamente elevado, refletindo a expectativa de crescimento do setor (exemplo educacional).',
+    pl: 'P/L ≈ 19,4 (pesquisado em ago/2026), refletindo a expectativa de crescimento do setor.',
     pvp: 'P/VP historicamente elevado (exemplo educacional).',
-    dividendYield: 'Dividend Yield historicamente baixo, já que a empresa reinveste boa parte do lucro em crescimento (exemplo educacional).',
+    dividendYield: 'Dividend Yield ≈ 6,1% ao ano nos últimos 12 meses (ago/2026).',
+    priceApprox: 'R$ 33,40 (ago/2026)',
+    payoutFrequency: 'Cerca de 4x ao ano (aproximadamente trimestral, via JCP).',
     growth: 'Crescimento historicamente forte, com expansão de frota e consolidação do setor.',
     risks: ['Alto endividamento para financiar a frota', 'Sensibilidade a juros', 'Preço de veículos novos e usados'],
     outlook: 'Perspectivas ligadas à penetração de aluguel de carros e gestão de frotas no Brasil.',
@@ -283,9 +412,11 @@ export const companies: SeedCompany[] = [
     roe: 'ROE historicamente elevado (exemplo educacional).',
     debt: 'Endividamento historicamente baixo a moderado (exemplo educacional).',
     cashFlow: 'Forte geração de caixa, típica de negócios de infraestrutura de mercado com baixa necessidade de reinvestimento.',
-    pl: 'P/L historicamente moderado a elevado, refletindo a qualidade do negócio (exemplo educacional).',
+    pl: 'P/L ≈ 15,55 (pesquisado em ago/2026), refletindo a qualidade do negócio.',
     pvp: 'P/VP historicamente elevado (exemplo educacional).',
-    dividendYield: 'Dividend Yield historicamente moderado, combinado com recompras de ações (exemplo educacional).',
+    dividendYield: 'Dividend Yield ≈ 4,0% ao ano nos últimos 12 meses (ago/2026), combinado com recompras de ações.',
+    priceApprox: 'R$ 14,95 (ago/2026)',
+    payoutFrequency: 'Trimestral (janeiro, abril, julho e outubro, aproximadamente).',
     growth: 'Crescimento ligado ao aumento do volume negociado na bolsa e à entrada de novos investidores no mercado de capitais brasileiro.',
     risks: ['Depende do volume de negociação do mercado', 'Concorrência de novas infraestruturas de negociação', 'Regulação do mercado de capitais'],
     outlook: 'Perspectivas ligadas ao crescimento do número de investidores pessoa física e ao desenvolvimento do mercado de capitais brasileiro.',

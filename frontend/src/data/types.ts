@@ -71,6 +71,8 @@ export interface InvestmentOption {
   name: string
   ticker?: string
   description: string
+  marketInfo?: string
+  payoutFrequency?: string
 }
 
 export interface Company {
@@ -97,4 +99,6 @@ export interface Company {
   dangers: string[]
   qualitySummary: string
   priceSummary: string
+  priceApprox?: string
+  payoutFrequency?: string
 }

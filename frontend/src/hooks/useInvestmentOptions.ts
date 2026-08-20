@@ -1,30 +1,35 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ASSET_CLASSES, type AssetClass } from '../utils/finance'
 import type { InvestmentOption } from '../data/types'
 import { api } from '../utils/api'
 
+function emptyByClass(): Record<AssetClass, InvestmentOption[]> {
+  return Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, [] as InvestmentOption[]])) as Record<
+    AssetClass,
+    InvestmentOption[]
+  >
+}
+
 export function useInvestmentOptions() {
-  const [byClass, setByClass] = useState<Record<AssetClass, InvestmentOption[]>>(() =>
-    Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, [] as InvestmentOption[]])) as Record<AssetClass, InvestmentOption[]>,
-  )
+  const [byClass, setByClass] = useState<Record<AssetClass, InvestmentOption[]>>(() => emptyByClass())
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    api
+  const refetch = useCallback(() => {
+    return api
       .get<InvestmentOption[]>('/api/investment-options')
       .then((options) => {
-        const grouped = Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, [] as InvestmentOption[]])) as Record<
-          AssetClass,
-          InvestmentOption[]
-        >
+        const grouped = emptyByClass()
         for (const opt of options) {
           if (grouped[opt.assetClass as AssetClass]) grouped[opt.assetClass as AssetClass].push(opt)
         }
         setByClass(grouped)
       })
       .catch(console.error)
-      .finally(() => setLoading(false))
   }, [])
 
-  return { byClass, loading }
+  useEffect(() => {
+    refetch().finally(() => setLoading(false))
+  }, [refetch])
+
+  return { byClass, loading, refetch }
 }

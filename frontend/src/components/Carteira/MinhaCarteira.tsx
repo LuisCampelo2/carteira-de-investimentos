@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { AlertTriangle, PiggyBank, Trash2, X } from 'lucide-react'
 import type { CarteiraState } from '../../data/types'
-import { ASSET_CLASSES, ASSET_CLASS_COLORS, formatBRL, simulateGrowth, type RiskTolerance } from '../../utils/finance'
+import { ASSET_CLASSES, ASSET_CLASS_COLORS, ANNUAL_RATE_BY_RISK, formatBRL, simulateGrowth, type RiskTolerance } from '../../utils/finance'
+
+const RISK_LABELS: Record<RiskTolerance, string> = { baixa: 'Baixa', media: 'Média', alta: 'Alta' }
 import { GrowthChart } from '../PortfolioSimulator/GrowthChart'
 import { PortfolioSimulator } from '../PortfolioSimulator/PortfolioSimulator'
 
@@ -103,6 +105,13 @@ export function MinhaCarteira({
               <div className="rounded-lg border border-slate-700/50 px-3 py-2">
                 <div className="text-[11px] uppercase tracking-wide text-slate-500">Objetivo</div>
                 <div className="text-slate-200">{carteira.objective}</div>
+              </div>
+              <div className="rounded-lg border border-slate-700/50 px-3 py-2">
+                <div className="text-[11px] uppercase tracking-wide text-slate-500">Risco (usado na projeção)</div>
+                <div className="text-slate-200">
+                  {RISK_LABELS[(carteira.risk as RiskTolerance) || 'media']} · ≈
+                  {(ANNUAL_RATE_BY_RISK[(carteira.risk as RiskTolerance) || 'media'] * 100).toFixed(0)}% a.a.
+                </div>
               </div>
             </div>
 

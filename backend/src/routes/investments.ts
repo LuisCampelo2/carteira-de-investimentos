@@ -12,6 +12,8 @@ investmentOptionsRouter.get('/', async (_req, res) => {
       name: row.name,
       ticker: row.ticker ?? undefined,
       description: row.description,
+      marketInfo: row.market_info ?? undefined,
+      payoutFrequency: row.payout_frequency ?? undefined,
     })),
   )
 })
@@ -45,6 +47,8 @@ companiesRouter.get('/', async (_req, res) => {
       dangers: row.dangers,
       qualitySummary: row.quality_summary,
       priceSummary: row.price_summary,
+      priceApprox: row.price_approx ?? undefined,
+      payoutFrequency: row.payout_frequency ?? undefined,
     })),
   )
 })
