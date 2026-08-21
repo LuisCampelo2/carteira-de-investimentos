@@ -11,6 +11,10 @@ export interface CarteiraItem {
   rendaFixaTaxa?: string
   rendaFixaVencimento?: string
   rendaFixaAvisos?: string[]
+  /** Annual rate (%) used to compound this item's own recurring monthly
+   * purchase in the growth projection — the item's real dividend/FII yield
+   * when we have one, otherwise the hypothetical risk-based rate. */
+  estimatedAnnualRate?: number
 }
 
 export interface CarteiraState {
@@ -20,6 +24,8 @@ export interface CarteiraState {
   years: number
   objective: string
   risk: string
+  estimatedAnnualRate?: number
+  estimatedAnnualRateCoverage?: number
   updatedAt: string
 }
 

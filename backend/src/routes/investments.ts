@@ -54,6 +54,7 @@ companiesRouter.get('/', async (_req, res) => {
       priceValue: row.price_value != null ? Number(row.price_value) : undefined,
       payoutFrequency: row.payout_frequency ?? undefined,
       dividendYieldValue: row.dividend_yield_value != null ? Number(row.dividend_yield_value) : undefined,
+      dividendReferenceMonth: row.dividend_reference_month ?? undefined,
       nextPaymentDate: row.next_payment_date
         ? new Date(row.next_payment_date).toISOString().slice(0, 10)
         : undefined,

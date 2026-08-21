@@ -12,6 +12,9 @@ function rowToCarteira(row: any): CarteiraState {
     years: row.years,
     objective: row.objective,
     risk: row.risk,
+    estimatedAnnualRate: row.estimated_annual_rate != null ? Number(row.estimated_annual_rate) : undefined,
+    estimatedAnnualRateCoverage:
+      row.estimated_annual_rate_coverage != null ? Number(row.estimated_annual_rate_coverage) : undefined,
     updatedAt: row.updated_at,
   }
 }
@@ -24,11 +27,15 @@ carteiraRouter.get('/', async (_req, res) => {
 carteiraRouter.put('/', async (req, res) => {
   const body = req.body as CarteiraState
   const { rows } = await pool.query(
-    `INSERT INTO carteira (id, items, monthly_contribution, initial_amount, years, objective, risk, updated_at)
-     VALUES (1, $1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO carteira (
+       id, items, monthly_contribution, initial_amount, years, objective, risk,
+       estimated_annual_rate, estimated_annual_rate_coverage, updated_at
+     )
+     VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (id) DO UPDATE SET
        items = $1, monthly_contribution = $2, initial_amount = $3, years = $4,
-       objective = $5, risk = $6, updated_at = $7
+       objective = $5, risk = $6, estimated_annual_rate = $7, estimated_annual_rate_coverage = $8,
+       updated_at = $9
      RETURNING *`,
     [
       JSON.stringify(body.items ?? []),
@@ -37,6 +44,8 @@ carteiraRouter.put('/', async (req, res) => {
       body.years ?? 0,
       body.objective ?? '',
       body.risk ?? '',
+      body.estimatedAnnualRate ?? null,
+      body.estimatedAnnualRateCoverage ?? null,
       body.updatedAt ?? new Date().toISOString(),
     ],
   )

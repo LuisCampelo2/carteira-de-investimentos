@@ -10,6 +10,15 @@ CREATE TABLE IF NOT EXISTS carteira (
   CONSTRAINT carteira_singleton CHECK (id = 1)
 );
 
+-- Taxa anual (%) usada na projeção de crescimento, calculada a partir do
+-- rendimento real dos ativos escolhidos (ponderado pelo valor mensal de
+-- cada um) misturado com a taxa hipotética de risco só na fração sem dado
+-- real — ver portfolioAnnualRate no PortfolioSimulator. Persistida aqui pra
+-- Minha Carteira mostrar a mesma taxa usada quando a carteira foi montada,
+-- sem precisar recalcular.
+ALTER TABLE carteira ADD COLUMN IF NOT EXISTS estimated_annual_rate numeric;
+ALTER TABLE carteira ADD COLUMN IF NOT EXISTS estimated_annual_rate_coverage numeric;
+
 CREATE TABLE IF NOT EXISTS aula_progress (
   aula_id text PRIMARY KEY,
   status text NOT NULL DEFAULT 'not-started',
@@ -65,15 +74,23 @@ ALTER TABLE companies ADD COLUMN IF NOT EXISTS payout_frequency text;
 -- price_approx alone can't be parsed reliably for that.
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS price_value numeric;
 
--- Real payout data from brapi.dev (dividendYield + dividendsData modules),
--- only ever set from the live API — never hand-typed — since B3 doesn't
--- expose this for FIIs/ETFs on our plan and we don't want to guess it.
+-- Real payout data. For the few tickers brapi.dev's free tier covers
+-- (dividendYield + dividendsData modules), set live on every refresh and
+-- paired with next_payment_date. For the rest, brapi's dividend module needs
+-- a paid plan we don't have — dividend_yield_value/dividend_reference_month
+-- are instead seeded once from real trailing-12-month DY figures researched
+-- from public sources (statusinvest.com.br, investidor10.com.br), never
+-- estimated, and left with next_payment_date null since we don't have a real
+-- payment calendar for them. The refresh endpoint never overwrites these
+-- with guesses — a failed live fetch just leaves the researched value as-is.
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS dividend_yield_value numeric;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS dividend_reference_month text;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS next_payment_date date;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS next_payment_amount numeric;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS next_payment_label text;
 -- Mensal/Trimestral/Semestral/Anual, inferido dos intervalos reais entre os
 -- pagamentos já anunciados (calculado no refresh, nunca digitado à mão).
+-- Null quando não há calendário real (caso dos DY pesquisados manualmente).
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS payment_frequency text;
 
 -- Same idea for investment_options: only set for classes with a real, whole

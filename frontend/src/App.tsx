@@ -17,33 +17,66 @@ type NavState = { view: View; drawer: Drawer }
 
 const HOME_STATE: NavState = { view: 'home', drawer: null }
 
+// Every screen gets a real URL, so refreshing (F5) or sharing a link lands
+// back on the same page instead of always resetting to home — this is the
+// only place that maps between NavState and the address bar.
+function stateToPath(state: NavState): string {
+  if (state.drawer?.type === 'aula') {
+    const base = `/mapa/aula/${encodeURIComponent(state.drawer.aulaId)}`
+    return state.drawer.conceptId ? `${base}?conceito=${encodeURIComponent(state.drawer.conceptId)}` : base
+  }
+  if (state.view === 'home') return '/'
+  return `/${state.view}`
+}
+
+function pathToState(pathname: string, search: string): NavState {
+  const aulaMatch = pathname.match(/^\/mapa\/aula\/([^/]+)\/?$/)
+  if (aulaMatch) {
+    const conceptId = new URLSearchParams(search).get('conceito')
+    return {
+      view: 'mapa',
+      drawer: { type: 'aula', aulaId: decodeURIComponent(aulaMatch[1]), conceptId: conceptId ?? undefined },
+    }
+  }
+  const view = pathname.replace(/^\/|\/$/g, '')
+  if (view === 'mapa' || view === 'glossario' || view === 'carteira') return { view, drawer: null }
+  return HOME_STATE
+}
+
+function currentLocationState(): NavState {
+  return pathToState(window.location.pathname, window.location.search)
+}
+
 export default function App() {
   const { getStatus, setStatus, markStarted, completedCount, total } = useProgress()
   const { carteira, saveCarteira, removeItem, clearCarteira } = useCarteira()
   const isDesktop = useMediaQuery('(min-width: 768px)')
-  const [view, setView] = useState<View>('home')
-  const [drawer, setDrawer] = useState<Drawer>(null)
+  const [view, setView] = useState<View>(() => currentLocationState().view)
+  const [drawer, setDrawer] = useState<Drawer>(() => currentLocationState().drawer)
 
-  // Keep the browser's Back/Forward buttons in sync with in-app navigation,
-  // since this is a single-page app with no URL routing of its own. The
-  // popstate handler only ever calls setView/setDrawer directly (never
-  // navigate()), so there's no risk of it re-pushing the entry it came from.
+  // Keep the browser's Back/Forward buttons (and a raw F5 reload) in sync
+  // with in-app navigation. The popstate handler only ever calls
+  // setView/setDrawer directly (never navigate()), so there's no risk of it
+  // re-pushing the entry it came from.
   useEffect(() => {
-    window.history.replaceState(HOME_STATE, '')
+    const initial = currentLocationState()
+    window.history.replaceState(initial, '', stateToPath(initial))
+    if (initial.drawer?.type === 'aula') markStarted(initial.drawer.aulaId)
 
     const onPopState = (e: PopStateEvent) => {
-      const state = (e.state as NavState | null) ?? HOME_STATE
+      const state = (e.state as NavState | null) ?? currentLocationState()
       setView(state.view)
       setDrawer(state.drawer)
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const navigate = useCallback((next: NavState) => {
     setView(next.view)
     setDrawer(next.drawer)
-    window.history.pushState(next, '')
+    window.history.pushState(next, '', stateToPath(next))
   }, [])
 
   const openAula = useCallback(

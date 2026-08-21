@@ -1,24 +1,21 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ChevronLeft, GripVertical, Minus, Plus, PiggyBank, Sparkles, X } from 'lucide-react'
 import {
   ASSET_CLASSES,
   ASSET_CLASS_COLORS,
   ANNUAL_RATE_BY_RISK,
-  getAllocationPreset,
-  simulateGrowth,
+  simulatePortfolioGrowth,
   formatBRL,
   formatBRLExact,
   formatPaymentDate,
   type AssetClass,
-  type RiskTolerance,
+  type GrowthStream,
 } from '../../utils/finance'
 import type { CarteiraItem, CarteiraState, InvestmentOption } from '../../data/types'
 import { useInvestmentOptions } from '../../hooks/useInvestmentOptions'
 import { useCompanies } from '../../hooks/useCompanies'
 import { RefreshPricesButton } from '../ui/RefreshPricesButton'
 import { GrowthChart } from './GrowthChart'
-
-const objetivos = ['Aposentadoria', 'Reserva de longo prazo', 'Comprar um imóvel', 'Independência financeira', 'Outro']
 
 const MONTHS_PT = [
   'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
@@ -34,13 +31,6 @@ function formatReferenceMonth(iso: string): string {
 // Selecting an asset spends one cota; once all cotas are spent, the class is
 // fully allocated and no more assets can be added to it without freeing one up.
 const MAX_ITEMS_PER_CLASS = 4
-
-const RISK_SUGGESTION_BY_OBJECTIVE: Partial<Record<(typeof objetivos)[number], RiskTolerance>> = {
-  Aposentadoria: 'media',
-  'Reserva de longo prazo': 'baixa',
-  'Comprar um imóvel': 'baixa',
-  'Independência financeira': 'alta',
-}
 
 // Renda fixa (CDB/LCI/LCA/Tesouro) is bought over-the-counter, at whatever
 // rate/term the bank or corretora is offering that day — there's no public
@@ -65,6 +55,49 @@ type Step = 'alocacao' | 'ativos' | 'resumo'
 const STEPS: Step[] = ['alocacao', 'ativos', 'resumo']
 const STEP_LABELS: Record<Step, string> = { alocacao: '1. Alocação', ativos: '2. Ativos', resumo: '3. Carteira' }
 
+// Rascunho do assistente, salvo no sessionStorage a cada mudança — sobrevive
+// a um F5 ou a navegar pra outra página e voltar, sem precisar preencher tudo
+// de novo. Some sozinho ao fechar a aba (sessionStorage) e é limpo ao
+// confirmar a carteira (ver clearDraft em confirm()).
+const DRAFT_KEY = 'portfolioSimulatorDraft'
+
+interface SimulatorDraft {
+  step: Step
+  initial: number
+  monthly: number
+  years: number
+  percents: Record<AssetClass, number>
+  addedClasses: AssetClass[]
+  quantities: Record<AssetClass, Record<string, number>>
+  customOptions: Record<AssetClass, InvestmentOption[]>
+  rendaFixaEntries: RendaFixaEntry[]
+}
+
+function loadDraft(): SimulatorDraft | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY)
+    return raw ? (JSON.parse(raw) as SimulatorDraft) : null
+  } catch {
+    return null
+  }
+}
+
+function saveDraft(draft: SimulatorDraft) {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  } catch {
+    // sessionStorage indisponível (ex.: aba anônima) — só perde o autosave, não quebra o app.
+  }
+}
+
+function clearDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY)
+  } catch {
+    // ignora
+  }
+}
+
 export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: CarteiraState) => void }) {
   const { byClass: baseOptionsByClass, loading: optionsLoading, refetch: refetchOptions } = useInvestmentOptions()
   const { companies, loading: companiesLoading, refetch: refetchCompanies } = useCompanies()
@@ -81,6 +114,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
         payoutFrequency: c.payoutFrequency,
         price: c.priceValue,
         dividendYieldValue: c.dividendYieldValue,
+        dividendReferenceMonth: c.dividendReferenceMonth,
         nextPaymentDate: c.nextPaymentDate,
         nextPaymentAmount: c.nextPaymentAmount,
         nextPaymentLabel: c.nextPaymentLabel,
@@ -90,28 +124,37 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
     return baseOptionsByClass[cls]
   }
 
-  const [step, setStep] = useState<Step>('alocacao')
-  const [initial, setInitial] = useState(0)
-  const [monthly, setMonthly] = useState(0)
-  const [years, setYears] = useState(0)
-  const [risk, setRisk] = useState<RiskTolerance>('media')
-  const [objective, setObjective] = useState(objetivos[0])
-  const [percents, setPercents] = useState<Record<AssetClass, number>>(() =>
-    Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, 0])) as Record<AssetClass, number>,
+  const [initialDraft] = useState<SimulatorDraft | null>(loadDraft)
+
+  const [step, setStep] = useState<Step>(initialDraft?.step ?? 'alocacao')
+  const [initial, setInitial] = useState(initialDraft?.initial ?? 0)
+  const [monthly, setMonthly] = useState(initialDraft?.monthly ?? 0)
+  const [years, setYears] = useState(initialDraft?.years ?? 0)
+  // Não é mais escolhido pelo usuário — só uma taxa hipotética interna, usada
+  // como fallback na projeção para a parte da carteira sem dado real de
+  // rendimento (ver portfolioAnnualRate/portfolioStreams).
+  const risk = 'media'
+  const [percents, setPercents] = useState<Record<AssetClass, number>>(
+    () =>
+      initialDraft?.percents ?? (Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, 0])) as Record<AssetClass, number>),
   )
-  const [addedClasses, setAddedClasses] = useState<AssetClass[]>([])
+  const [addedClasses, setAddedClasses] = useState<AssetClass[]>(initialDraft?.addedClasses ?? [])
   const [dragOver, setDragOver] = useState(false)
   // Quantity of each asset id within its class (0 or missing = not in the cart).
-  const [quantities, setQuantities] = useState<Record<AssetClass, Record<string, number>>>(() =>
-    Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, {} as Record<string, number>])) as Record<AssetClass, Record<string, number>>,
+  const [quantities, setQuantities] = useState<Record<AssetClass, Record<string, number>>>(
+    () =>
+      initialDraft?.quantities ??
+      (Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, {} as Record<string, number>])) as Record<AssetClass, Record<string, number>>),
   )
-  const [customOptions, setCustomOptions] = useState<Record<AssetClass, InvestmentOption[]>>(() =>
-    Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, [] as InvestmentOption[]])) as Record<AssetClass, InvestmentOption[]>,
+  const [customOptions, setCustomOptions] = useState<Record<AssetClass, InvestmentOption[]>>(
+    () =>
+      initialDraft?.customOptions ??
+      (Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, [] as InvestmentOption[]])) as Record<AssetClass, InvestmentOption[]>),
   )
   const [customInput, setCustomInput] = useState<Record<AssetClass, string>>(() =>
     Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, ''])) as Record<AssetClass, string>,
   )
-  const [rendaFixaEntries, setRendaFixaEntries] = useState<RendaFixaEntry[]>([])
+  const [rendaFixaEntries, setRendaFixaEntries] = useState<RendaFixaEntry[]>(initialDraft?.rendaFixaEntries ?? [])
   const [rfTipo, setRfTipo] = useState(RENDA_FIXA_TIPOS[0])
   const [rfTaxa, setRfTaxa] = useState('')
   const [rfVencimento, setRfVencimento] = useState('')
@@ -119,6 +162,10 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   const [rfTemTaxas, setRfTemTaxas] = useState(false)
   const [rfTemCarencia, setRfTemCarencia] = useState(false)
   const [rfValor, setRfValor] = useState(0)
+
+  useEffect(() => {
+    saveDraft({ step, initial, monthly, years, percents, addedClasses, quantities, customOptions, rendaFixaEntries })
+  }, [step, initial, monthly, years, percents, addedClasses, quantities, customOptions, rendaFixaEntries])
 
   const allOptionsForClass = (cls: AssetClass): InvestmentOption[] => [...optionsForClass(cls), ...customOptions[cls]]
 
@@ -156,35 +203,8 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
     c === 'Renda fixa' ? rendaFixaEntries.length > 0 : Object.values(quantities[c]).some((q) => q > 0),
   )
 
-  const points = useMemo(() => simulateGrowth(initial, monthly, years, risk), [initial, monthly, years, risk])
-  const last = points[points.length - 1]
-
   const addClass = (cls: AssetClass) => {
     setAddedClasses((prev) => (prev.includes(cls) ? prev : [...prev, cls]))
-  }
-
-  const applyPreset = (r: RiskTolerance) => {
-    setRisk(r)
-    if (addedClasses.length === 0) return
-
-    const preset = getAllocationPreset(r)
-    const weights = addedClasses.map((c) => preset[c] || 0)
-    const sumWeights = weights.reduce((s, w) => s + w, 0)
-
-    setPercents((prev) => {
-      const next = { ...prev }
-      let allocated = 0
-      addedClasses.forEach((c, i) => {
-        if (i === addedClasses.length - 1) {
-          next[c] = Math.max(0, 100 - allocated)
-        } else {
-          const value = sumWeights === 0 ? Math.round(100 / addedClasses.length) : Math.round((weights[i] / sumWeights) * 100)
-          next[c] = value
-          allocated += value
-        }
-      })
-      return next
-    })
   }
 
   const removeClass = (cls: AssetClass) => {
@@ -197,12 +217,6 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   const setPercent = (cls: AssetClass, value: number) => {
     const clamped = Math.max(0, Math.min(100, Math.round(value)))
     setPercents((prev) => ({ ...prev, [cls]: clamped }))
-  }
-
-  const handleObjectiveChange = (nextObjective: string) => {
-    setObjective(nextObjective)
-    const suggestion = RISK_SUGGESTION_BY_OBJECTIVE[nextObjective]
-    if (suggestion) applyPreset(suggestion)
   }
 
   // Real unit price when we know it (stocks), otherwise an equal share of the
@@ -259,11 +273,84 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   const expectedIncome = (cls: AssetClass, opt: InvestmentOption, qty: number): number | null => {
     if (qty <= 0) return null
     if (opt.nextPaymentAmount != null && opt.nextPaymentDate) return opt.nextPaymentAmount * qty
-    if (opt.dividendYieldValue != null && opt.dividendReferenceMonth) {
+    // Só soma o rendimento mensal real dos FIIs (CVM) aqui. O DY de ações
+    // pesquisado manualmente é anualizado (12 meses), não mensal — misturar
+    // os dois no mesmo total daria uma soma sem sentido. Ele aparece só no
+    // card do ativo, separado, nunca dentro de "Proventos esperados".
+    if (cls === 'FIIs' && opt.dividendYieldValue != null && opt.dividendReferenceMonth) {
       return unitPrice(cls, opt) * (opt.dividendYieldValue / 100) * qty
     }
     return null
   }
+
+  // Rendimento real anualizado (%), quando existe. Ações: dividendYieldValue
+  // já é anual (TTM real ou calendário real da brapi.dev). FIIs: é mensal
+  // (CVM), então composto para virar taxa anual. Nunca estimado — é o mesmo
+  // número já mostrado no card do ativo, só em formato de taxa.
+  const annualYieldPercent = (cls: AssetClass, opt: InvestmentOption): number | null => {
+    if (opt.dividendYieldValue == null) return null
+    if (cls === 'FIIs') return (Math.pow(1 + opt.dividendYieldValue / 100, 12) - 1) * 100
+    if (cls === 'Ações') return opt.dividendYieldValue
+    return null
+  }
+
+  // Assume que TODO mês você repete exatamente a mesma compra (mesmos
+  // ativos, mesma quantidade) — um "stream" de aporte recorrente por ativo
+  // escolhido, cada um rendendo à sua própria taxa real quando ela existe.
+  // Qualquer parte do aporte ainda sem ativo real escolhido (ex.: sobra de
+  // uma classe, ou Renda fixa/ETFs/Cripto sem dado de rendimento) vira um
+  // stream à taxa hipotética do risco — nunca fica de fora nem herda a taxa
+  // real de outro ativo.
+  const portfolioStreams = useMemo(() => {
+    const fallbackRate = ANNUAL_RATE_BY_RISK[risk]
+    const streams: (GrowthStream & { real: boolean })[] = []
+
+    for (const cls of activeClasses) {
+      const classAmount = monthly * (percents[cls] / 100)
+
+      if (cls === 'Renda fixa') {
+        for (const e of rendaFixaEntries) {
+          if (e.valor > 0) streams.push({ monthlyAmount: e.valor, annualRate: fallbackRate, real: false })
+        }
+        const leftover = classAmount - rendaFixaSpent
+        if (leftover > 0.005) streams.push({ monthlyAmount: leftover, annualRate: fallbackRate, real: false })
+        continue
+      }
+
+      const options = allOptionsForClass(cls)
+      let classAllocated = 0
+      for (const opt of options) {
+        const qty = classQuantity(cls, opt.id)
+        if (qty <= 0) continue
+        const amount = unitPrice(cls, opt) * qty
+        classAllocated += amount
+        const yieldPct = annualYieldPercent(cls, opt)
+        streams.push({ monthlyAmount: amount, annualRate: (yieldPct ?? fallbackRate * 100) / 100, real: yieldPct != null })
+      }
+      const leftover = classAmount - classAllocated
+      if (leftover > 0.005) streams.push({ monthlyAmount: leftover, annualRate: fallbackRate, real: false })
+    }
+
+    return streams
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeClasses, quantities, customOptions, rendaFixaEntries, rendaFixaSpent, monthly, percents, risk])
+
+  // Só para exibir um resumo em % — a projeção em si soma cada stream acima
+  // já composto na sua própria taxa, não essa média.
+  const portfolioAnnualRate = useMemo(() => {
+    const fallbackRatePercent = ANNUAL_RATE_BY_RISK[risk] * 100
+    const totalMonthly = portfolioStreams.reduce((s, x) => s + x.monthlyAmount, 0)
+    if (totalMonthly <= 0) return { rate: fallbackRatePercent, coveragePercent: 0 }
+    const weightedRate = portfolioStreams.reduce((s, x) => s + x.monthlyAmount * x.annualRate * 100, 0) / totalMonthly
+    const coveredMonthly = portfolioStreams.filter((x) => x.real).reduce((s, x) => s + x.monthlyAmount, 0)
+    return { rate: weightedRate, coveragePercent: (coveredMonthly / totalMonthly) * 100 }
+  }, [portfolioStreams, risk])
+
+  const points = useMemo(
+    () => simulatePortfolioGrowth(initial, ANNUAL_RATE_BY_RISK[risk], years, portfolioStreams),
+    [initial, years, portfolioStreams, risk],
+  )
+  const last = points[points.length - 1]
 
   const changeQuantity = (cls: AssetClass, id: string, delta: number) => {
     const options = allOptionsForClass(cls)
@@ -299,6 +386,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
             rendaFixaTaxa: e.taxa,
             rendaFixaVencimento: e.vencimento || undefined,
             rendaFixaAvisos: avisos,
+            estimatedAnnualRate: ANNUAL_RATE_BY_RISK[risk] * 100,
           }
         })
       }
@@ -325,17 +413,21 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
             monthlyAmount: unitPrice(cls, opt) * qty,
             expectedIncome: income ?? undefined,
             expectedIncomeNote: note,
+            estimatedAnnualRate: annualYieldPercent(cls, opt) ?? ANNUAL_RATE_BY_RISK[risk] * 100,
           }
         })
     })
 
+    clearDraft()
     onConfirm({
       items,
       monthlyContribution: monthly,
       initialAmount: initial,
       years,
-      objective,
+      objective: '',
       risk,
+      estimatedAnnualRate: portfolioAnnualRate.rate,
+      estimatedAnnualRateCoverage: portfolioAnnualRate.coveragePercent,
       updatedAt: new Date().toISOString(),
     })
   }
@@ -367,7 +459,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
 
       {step === 'alocacao' && (
         <div className="animate-fade-in space-y-5">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <label className="block text-sm">
               <span className="mb-1 block text-slate-400">Patrimônio inicial</span>
               <input
@@ -400,40 +492,6 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                 className="w-full appearance-none rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-200 outline-none [-moz-appearance:textfield] focus:border-sky-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
             </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-slate-400">Objetivo</span>
-              <select
-                value={objective}
-                onChange={(e) => handleObjectiveChange(e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-200 outline-none focus:border-sky-500"
-              >
-                {objetivos.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div>
-            <span className="mb-1.5 block text-sm text-slate-400">Tolerância ao risco (redistribui a % entre os investimentos já adicionados à carteira)</span>
-            <div className="flex gap-2">
-              {(['baixa', 'media', 'alta'] as RiskTolerance[]).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => applyPreset(r)}
-                  className={`flex-1 rounded-lg border px-3 py-2 text-sm transition-colors ${
-                    risk === r
-                      ? 'border-sky-500 bg-sky-500/20 text-sky-200'
-                      : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-600'
-                  }`}
-                >
-                  <span className="block capitalize">{r === 'media' ? 'Média' : r}</span>
-                  <span className="block text-xs opacity-70">~{(ANNUAL_RATE_BY_RISK[r] * 100).toFixed(0)}% a.a.</span>
-                </button>
-              ))}
-            </div>
           </div>
 
           <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-4">
@@ -671,6 +729,11 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
             const remaining = Math.max(0, classAmount - spent)
             const fullyAllocated = remaining < 0.005
             const hasAnyQty = Object.values(quantities[cls]).some((q) => q > 0)
+            const classIncome = options.reduce((sum, opt) => {
+              const income = expectedIncome(cls, opt, classQuantity(cls, opt.id))
+              return income != null ? sum + income : sum
+            }, 0)
+            const classIncomeCount = options.filter((opt) => expectedIncome(cls, opt, classQuantity(cls, opt.id)) != null).length
             return (
               <div key={cls} className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-4">
                 <div className="mb-1 flex items-center justify-between">
@@ -692,6 +755,12 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                     Restante: {formatBRLExact(remaining)}
                   </span>
                 </div>
+                {classIncomeCount > 0 && (
+                  <p className="mb-2 text-xs font-medium text-emerald-400">
+                    Deve receber ≈ {formatBRLExact(classIncome)} nesta classe ({classIncomeCount}{' '}
+                    {classIncomeCount === 1 ? 'ativo com dado real' : 'ativos com dado real'})
+                  </p>
+                )}
                 {fullyAllocated && (
                   <p className="mb-2 text-xs text-amber-300">
                     Valor da classe totalmente distribuído. Reduza a quantidade de um ativo para ajustar outro.
@@ -734,7 +803,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                               )}
                             </div>
                           )}
-                          {opt.dividendYieldValue != null && !opt.nextPaymentDate && opt.dividendReferenceMonth && (
+                          {opt.dividendYieldValue != null && !opt.nextPaymentDate && opt.dividendReferenceMonth && cls === 'FIIs' && (
                             <div className="text-xs text-slate-400">
                               <span>
                                 Rendeu {opt.dividendYieldValue.toFixed(2).replace('.', ',')}% em{' '}
@@ -745,6 +814,25 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                                   ? `Você recebe ≈ ${formatBRLExact(unit * (opt.dividendYieldValue / 100) * qty)}/mês`
                                   : `≈ ${formatBRLExact(unit * (opt.dividendYieldValue / 100))}/un. por mês`}
                               </span>
+                            </div>
+                          )}
+                          {opt.dividendYieldValue != null && !opt.nextPaymentDate && opt.dividendReferenceMonth && cls === 'Ações' && (
+                            <div className="text-xs text-slate-400">
+                              {opt.dividendYieldValue === 0 ? (
+                                <span>Sem dividendos nos últimos 12 meses (dado de {formatReferenceMonth(opt.dividendReferenceMonth)})</span>
+                              ) : (
+                                <>
+                                  <span>
+                                    DY {opt.dividendYieldValue.toFixed(2).replace('.', ',')}% nos últimos 12 meses (dado de{' '}
+                                    {formatReferenceMonth(opt.dividendReferenceMonth)})
+                                  </span>
+                                  <span className={qty > 0 ? 'block font-medium text-emerald-300' : 'block'}>
+                                    {qty > 0
+                                      ? `≈ ${formatBRLExact(unit * (opt.dividendYieldValue / 100) * qty)}/ano estimado`
+                                      : `≈ ${formatBRLExact(unit * (opt.dividendYieldValue / 100))}/un. por ano`}
+                                  </span>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
@@ -943,7 +1031,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
           <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-4">
             <div className="mb-3 text-sm font-medium text-slate-300">Projeção de crescimento (simulação educacional)</div>
             <GrowthChart points={points} />
-            <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+            <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
               <div className="rounded-lg border border-slate-700/50 px-3 py-2">
                 <div className="text-[11px] uppercase tracking-wide text-slate-500">Total aportado</div>
                 <div className="text-slate-200">{formatBRL(last.invested)}</div>
@@ -953,16 +1041,20 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                 <div className="text-slate-200">{formatBRL(last.projected)}</div>
               </div>
               <div className="rounded-lg border border-slate-700/50 px-3 py-2">
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">Objetivo</div>
-                <div className="text-slate-200">{objective}</div>
-              </div>
-              <div className="rounded-lg border border-slate-700/50 px-3 py-2">
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">Risco (usado na projeção)</div>
-                <div className="text-slate-200 capitalize">
-                  {risk === 'media' ? 'Média' : risk} · ≈{(ANNUAL_RATE_BY_RISK[risk] * 100).toFixed(0)}% a.a.
-                </div>
+                <div className="text-[11px] uppercase tracking-wide text-slate-500">Taxa usada na projeção</div>
+                <div className="text-slate-200">≈{portfolioAnnualRate.rate.toFixed(1).replace('.', ',')}% a.a.</div>
               </div>
             </div>
+            <p className="mt-3 text-xs text-slate-500">
+              {portfolioAnnualRate.coveragePercent > 0.5
+                ? `Baseada no rendimento real de ${portfolioAnnualRate.coveragePercent.toFixed(0)}% da carteira (dividendos/proventos dos ativos escolhidos)${
+                    portfolioAnnualRate.coveragePercent < 99.5
+                      ? `, misturada com uma taxa hipotética de mercado (≈${(ANNUAL_RATE_BY_RISK[risk] * 100).toFixed(0)}% a.a.) para o restante (sem dado real de rendimento).`
+                      : '.'
+                  }`
+                : `Sem dado real de rendimento para os ativos escolhidos — usando uma taxa hipotética de mercado (≈${(ANNUAL_RATE_BY_RISK[risk] * 100).toFixed(0)}% a.a.).`}{' '}
+              Não inclui valorização/desvalorização do preço dos ativos, só o rendimento (dividendos/proventos).
+            </p>
           </div>
 
           <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-200">

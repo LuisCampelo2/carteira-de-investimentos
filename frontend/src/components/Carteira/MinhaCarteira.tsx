@@ -8,11 +8,10 @@ import {
   formatBRL,
   formatBRLExact,
   formatPaymentDate,
-  simulateGrowth,
+  simulatePortfolioGrowth,
   type RiskTolerance,
 } from '../../utils/finance'
 
-const RISK_LABELS: Record<RiskTolerance, string> = { baixa: 'Baixa', media: 'Média', alta: 'Alta' }
 import { GrowthChart } from '../PortfolioSimulator/GrowthChart'
 import { PortfolioSimulator } from '../PortfolioSimulator/PortfolioSimulator'
 
@@ -58,10 +57,31 @@ export function MinhaCarteira({
     return { total, withData, withoutData }
   }, [carteira])
 
+  // Taxa média exibida no resumo — calculada quando a carteira foi montada
+  // (ver portfolioAnnualRate no PortfolioSimulator); carteiras salvas antes
+  // dessa funcionalidade não têm esse dado, então caem de volta na taxa
+  // hipotética do risco.
+  const effectiveRatePercent = useMemo(() => {
+    if (!carteira) return 0
+    return carteira.estimatedAnnualRate ?? ANNUAL_RATE_BY_RISK[(carteira.risk as RiskTolerance) || 'media'] * 100
+  }, [carteira])
+
+  // A projeção em si assume que você repete TODO mês a mesma compra (mesmos
+  // ativos, mesma quantidade salva na carteira) — um stream por item, cada
+  // um rendendo à sua própria taxa (real quando o item tem uma, senão a
+  // hipotética do risco). Qualquer sobra do aporte mensal que não corresponde
+  // a nenhum item salvo também vira um stream à taxa hipotética.
   const points = useMemo(() => {
     if (!carteira) return []
-    return simulateGrowth(carteira.initialAmount, carteira.monthlyContribution, carteira.years, (carteira.risk as RiskTolerance) || 'media')
-  }, [carteira])
+    const fallbackRate = ANNUAL_RATE_BY_RISK[(carteira.risk as RiskTolerance) || 'media']
+    const streams = carteira.items.map((item) => ({
+      monthlyAmount: item.monthlyAmount,
+      annualRate: (item.estimatedAnnualRate ?? fallbackRate * 100) / 100,
+    }))
+    const leftover = carteira.monthlyContribution - totalMonthly
+    if (leftover > 0.005) streams.push({ monthlyAmount: leftover, annualRate: fallbackRate })
+    return simulatePortfolioGrowth(carteira.initialAmount, fallbackRate, carteira.years, streams)
+  }, [carteira, totalMonthly])
 
   return (
     <div className="flex h-full w-full flex-col bg-slate-950">
@@ -128,17 +148,22 @@ export function MinhaCarteira({
                 <div className="text-slate-200">{carteira.years} anos</div>
               </div>
               <div className="rounded-lg border border-slate-700/50 px-3 py-2">
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">Objetivo</div>
-                <div className="text-slate-200">{carteira.objective}</div>
-              </div>
-              <div className="rounded-lg border border-slate-700/50 px-3 py-2">
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">Risco (usado na projeção)</div>
-                <div className="text-slate-200">
-                  {RISK_LABELS[(carteira.risk as RiskTolerance) || 'media']} · ≈
-                  {(ANNUAL_RATE_BY_RISK[(carteira.risk as RiskTolerance) || 'media'] * 100).toFixed(0)}% a.a.
-                </div>
+                <div className="text-[11px] uppercase tracking-wide text-slate-500">Taxa usada na projeção</div>
+                <div className="text-slate-200">≈{effectiveRatePercent.toFixed(1).replace('.', ',')}% a.a.</div>
               </div>
             </div>
+            {carteira.estimatedAnnualRate != null && (
+              <p className="text-xs text-slate-500">
+                {(carteira.estimatedAnnualRateCoverage ?? 0) > 0.5
+                  ? `Baseada no rendimento real de ${(carteira.estimatedAnnualRateCoverage ?? 0).toFixed(0)}% da carteira (dividendos/proventos dos ativos escolhidos)${
+                      (carteira.estimatedAnnualRateCoverage ?? 0) < 99.5
+                        ? ', misturada com uma taxa hipotética de mercado para o restante.'
+                        : '.'
+                    }`
+                  : 'Sem dado real de rendimento para os ativos escolhidos — usando uma taxa hipotética de mercado.'}{' '}
+                Não inclui valorização/desvalorização do preço dos ativos, só o rendimento.
+              </p>
+            )}
 
             <div className="flex h-3 w-full overflow-hidden rounded-full">
               {ASSET_CLASSES.filter((c) => percentByClass[c] > 0).map((cls) => (
