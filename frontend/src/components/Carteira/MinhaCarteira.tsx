@@ -1,7 +1,16 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, PiggyBank, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Coins, PiggyBank, Trash2, X } from 'lucide-react'
 import type { CarteiraState } from '../../data/types'
-import { ASSET_CLASSES, ASSET_CLASS_COLORS, ANNUAL_RATE_BY_RISK, formatBRL, simulateGrowth, type RiskTolerance } from '../../utils/finance'
+import {
+  ASSET_CLASSES,
+  ASSET_CLASS_COLORS,
+  ANNUAL_RATE_BY_RISK,
+  formatBRL,
+  formatBRLExact,
+  formatPaymentDate,
+  simulateGrowth,
+  type RiskTolerance,
+} from '../../utils/finance'
 
 const RISK_LABELS: Record<RiskTolerance, string> = { baixa: 'Baixa', media: 'Média', alta: 'Alta' }
 import { GrowthChart } from '../PortfolioSimulator/GrowthChart'
@@ -32,6 +41,22 @@ export function MinhaCarteira({
     for (const key of Object.keys(map)) map[key] = (map[key] / totalMonthly) * 100
     return map
   }, [carteira, totalMonthly])
+
+  const incomeSummary = useMemo(() => {
+    if (!carteira) return { total: 0, withData: 0, withoutData: 0 }
+    let total = 0
+    let withData = 0
+    let withoutData = 0
+    for (const item of carteira.items) {
+      if (item.expectedIncome != null) {
+        total += item.expectedIncome
+        withData++
+      } else {
+        withoutData++
+      }
+    }
+    return { total, withData, withoutData }
+  }, [carteira])
 
   const points = useMemo(() => {
     if (!carteira) return []
@@ -131,24 +156,59 @@ export function MinhaCarteira({
                     {carteira.items
                       .filter((i) => i.assetClass === cls)
                       .map((item) => (
-                        <li key={item.id} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm">
-                          <span className="text-slate-200">
-                            {item.name}
-                            {item.ticker && item.ticker !== item.name && <span className="ml-1 text-xs text-slate-500">({item.ticker})</span>}
-                            {item.quantity != null && item.quantity > 1 && <span className="ml-1 text-xs text-slate-500">×{item.quantity}</span>}
-                          </span>
-                          <span className="flex items-center gap-3">
-                            <span className="text-slate-500">{formatBRL(item.monthlyAmount)}/mês</span>
-                            <button onClick={() => onRemoveItem(item.id)} className="text-slate-600 hover:text-rose-400" aria-label={`Remover ${item.name}`}>
-                              <Trash2 size={14} />
-                            </button>
-                          </span>
+                        <li key={item.id} className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-200">
+                              {item.name}
+                              {item.ticker && item.ticker !== item.name && <span className="ml-1 text-xs text-slate-500">({item.ticker})</span>}
+                              {item.quantity != null && item.quantity > 1 && <span className="ml-1 text-xs text-slate-500">×{item.quantity}</span>}
+                            </span>
+                            <span className="flex items-center gap-3">
+                              <span className="text-slate-500">{formatBRLExact(item.monthlyAmount)}/mês</span>
+                              <button onClick={() => onRemoveItem(item.id)} className="text-slate-600 hover:text-rose-400" aria-label={`Remover ${item.name}`}>
+                                <Trash2 size={14} />
+                              </button>
+                            </span>
+                          </div>
+                          {item.expectedIncome != null && (
+                            <div className="mt-0.5 text-xs text-emerald-400">
+                              Recebe ≈ {formatBRLExact(item.expectedIncome)}
+                              {item.expectedIncomeNote ? ` (${item.expectedIncomeNote})` : ''}
+                            </div>
+                          )}
+                          {item.rendaFixaVencimento && (
+                            <div className="mt-0.5 text-xs text-slate-500">Vencimento: {formatPaymentDate(item.rendaFixaVencimento)}</div>
+                          )}
+                          {item.rendaFixaAvisos && item.rendaFixaAvisos.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {item.rendaFixaAvisos.map((aviso) => (
+                                <span key={aviso} className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-300">
+                                  {aviso}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </li>
                       ))}
                   </ul>
                 </div>
               ))}
             </div>
+
+            {incomeSummary.withData > 0 && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-emerald-300">
+                  <Coins size={14} /> Proventos esperados
+                </div>
+                <div className="text-2xl font-bold text-emerald-400">{formatBRLExact(incomeSummary.total)}</div>
+                <p className="mt-1 text-xs text-emerald-200/80">
+                  Soma do próximo pagamento (ações) ou estimativa mensal (FIIs) de {incomeSummary.withData}{' '}
+                  {incomeSummary.withData === 1 ? 'ativo com dado real' : 'ativos com dado real'} de mercado.
+                  {incomeSummary.withoutData > 0 &&
+                    ` Não inclui ${incomeSummary.withoutData} ${incomeSummary.withoutData === 1 ? 'ativo sem' : 'ativos sem'} dado real disponível.`}
+                </p>
+              </div>
+            )}
 
             {points.length > 0 && (
               <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-4">

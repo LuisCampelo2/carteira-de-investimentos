@@ -7,16 +7,28 @@ import {
   getAllocationPreset,
   simulateGrowth,
   formatBRL,
+  formatBRLExact,
+  formatPaymentDate,
   type AssetClass,
   type RiskTolerance,
 } from '../../utils/finance'
-import type { CarteiraState, InvestmentOption } from '../../data/types'
+import type { CarteiraItem, CarteiraState, InvestmentOption } from '../../data/types'
 import { useInvestmentOptions } from '../../hooks/useInvestmentOptions'
 import { useCompanies } from '../../hooks/useCompanies'
 import { RefreshPricesButton } from '../ui/RefreshPricesButton'
 import { GrowthChart } from './GrowthChart'
 
 const objetivos = ['Aposentadoria', 'Reserva de longo prazo', 'Comprar um imóvel', 'Independência financeira', 'Outro']
+
+const MONTHS_PT = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+]
+
+function formatReferenceMonth(iso: string): string {
+  const [year, month] = iso.split('-')
+  return `${MONTHS_PT[Number(month) - 1]}/${year}`
+}
 
 // Each class's monthly budget is split into this many equal shares ("cotas").
 // Selecting an asset spends one cota; once all cotas are spent, the class is
@@ -29,6 +41,24 @@ const RISK_SUGGESTION_BY_OBJECTIVE: Partial<Record<(typeof objetivos)[number], R
   'Comprar um imóvel': 'baixa',
   'Independência financeira': 'alta',
 }
+
+// Renda fixa (CDB/LCI/LCA/Tesouro) is bought over-the-counter, at whatever
+// rate/term the bank or corretora is offering that day — there's no public
+// unit price the way there is for a stock. So instead of the price+quantity
+// model used for exchange-traded classes, it's captured as a described
+// application: what it is, the rate, the maturity, and any IR/fees/lock-up.
+interface RendaFixaEntry {
+  id: string
+  tipo: string
+  taxa: string
+  vencimento: string
+  temIR: boolean
+  temTaxas: boolean
+  temCarencia: boolean
+  valor: number
+}
+
+const RENDA_FIXA_TIPOS = ['CDB', 'LCI', 'LCA', 'Tesouro Selic', 'Tesouro IPCA+', 'Tesouro Prefixado', 'Debênture', 'Outro']
 
 type Step = 'alocacao' | 'ativos' | 'resumo'
 
@@ -50,6 +80,11 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
         marketInfo: c.priceApprox,
         payoutFrequency: c.payoutFrequency,
         price: c.priceValue,
+        dividendYieldValue: c.dividendYieldValue,
+        nextPaymentDate: c.nextPaymentDate,
+        nextPaymentAmount: c.nextPaymentAmount,
+        nextPaymentLabel: c.nextPaymentLabel,
+        realPaymentFrequency: c.realPaymentFrequency,
       }))
     }
     return baseOptionsByClass[cls]
@@ -76,6 +111,14 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   const [customInput, setCustomInput] = useState<Record<AssetClass, string>>(() =>
     Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, ''])) as Record<AssetClass, string>,
   )
+  const [rendaFixaEntries, setRendaFixaEntries] = useState<RendaFixaEntry[]>([])
+  const [rfTipo, setRfTipo] = useState(RENDA_FIXA_TIPOS[0])
+  const [rfTaxa, setRfTaxa] = useState('')
+  const [rfVencimento, setRfVencimento] = useState('')
+  const [rfTemIR, setRfTemIR] = useState(true)
+  const [rfTemTaxas, setRfTemTaxas] = useState(false)
+  const [rfTemCarencia, setRfTemCarencia] = useState(false)
+  const [rfValor, setRfValor] = useState(0)
 
   const allOptionsForClass = (cls: AssetClass): InvestmentOption[] => [...optionsForClass(cls), ...customOptions[cls]]
 
@@ -109,7 +152,9 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   const availableClasses = ASSET_CLASSES.filter((c) => !addedClasses.includes(c))
   const total = addedClasses.reduce((sum, c) => sum + (percents[c] || 0), 0)
   const activeClasses = addedClasses.filter((c) => percents[c] > 0)
-  const allActiveClassesHaveSelection = activeClasses.every((c) => Object.values(quantities[c]).some((q) => q > 0))
+  const allActiveClassesHaveSelection = activeClasses.every((c) =>
+    c === 'Renda fixa' ? rendaFixaEntries.length > 0 : Object.values(quantities[c]).some((q) => q > 0),
+  )
 
   const points = useMemo(() => simulateGrowth(initial, monthly, years, risk), [initial, monthly, years, risk])
   const last = points[points.length - 1]
@@ -146,6 +191,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
     setAddedClasses((prev) => prev.filter((c) => c !== cls))
     setPercents((prev) => ({ ...prev, [cls]: 0 }))
     setQuantities((prev) => ({ ...prev, [cls]: {} }))
+    if (cls === 'Renda fixa') setRendaFixaEntries([])
   }
 
   const setPercent = (cls: AssetClass, value: number) => {
@@ -176,6 +222,49 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
     return sum
   }
 
+  const rendaFixaSpent = rendaFixaEntries.reduce((sum, e) => sum + e.valor, 0)
+  const rendaFixaRemaining = Math.max(0, monthly * (percents['Renda fixa'] / 100) - rendaFixaSpent)
+
+  const addRendaFixaEntry = () => {
+    if (!rfTaxa.trim() || rfValor <= 0 || rfValor > rendaFixaRemaining + 0.005) return
+    const avisos: string[] = []
+    if (rfTemIR) avisos.push('Tem IR')
+    if (rfTemTaxas) avisos.push('Tem taxas')
+    if (rfTemCarencia) avisos.push('Tem carência')
+    setRendaFixaEntries((prev) => [
+      ...prev,
+      {
+        id: `rf-${Date.now()}`,
+        tipo: rfTipo,
+        taxa: rfTaxa.trim(),
+        vencimento: rfVencimento,
+        temIR: rfTemIR,
+        temTaxas: rfTemTaxas,
+        temCarencia: rfTemCarencia,
+        valor: rfValor,
+      },
+    ])
+    setRfTaxa('')
+    setRfVencimento('')
+    setRfValor(0)
+  }
+
+  const removeRendaFixaEntry = (id: string) => {
+    setRendaFixaEntries((prev) => prev.filter((e) => e.id !== id))
+  }
+
+  // Real payout only when we actually have it (brapi.dev for stocks, CVM for
+  // FIIs) — never estimated for classes without real data. Returns the next
+  // (or estimated monthly) amount for the given quantity, or null.
+  const expectedIncome = (cls: AssetClass, opt: InvestmentOption, qty: number): number | null => {
+    if (qty <= 0) return null
+    if (opt.nextPaymentAmount != null && opt.nextPaymentDate) return opt.nextPaymentAmount * qty
+    if (opt.dividendYieldValue != null && opt.dividendReferenceMonth) {
+      return unitPrice(cls, opt) * (opt.dividendYieldValue / 100) * qty
+    }
+    return null
+  }
+
   const changeQuantity = (cls: AssetClass, id: string, delta: number) => {
     const options = allOptionsForClass(cls)
     const opt = options.find((o) => o.id === id)
@@ -194,19 +283,50 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   }
 
   const confirm = () => {
-    const items = activeClasses.flatMap((cls) => {
+    const items: CarteiraItem[] = activeClasses.flatMap((cls): CarteiraItem[] => {
+      if (cls === 'Renda fixa') {
+        return rendaFixaEntries.map((e) => {
+          const avisos: string[] = []
+          if (e.temIR) avisos.push('Tem IR')
+          if (e.temTaxas) avisos.push('Tem taxas')
+          if (e.temCarencia) avisos.push('Tem carência')
+          return {
+            id: e.id,
+            assetClass: cls,
+            name: `${e.tipo} — ${e.taxa}`,
+            monthlyAmount: e.valor,
+            rendaFixaTipo: e.tipo,
+            rendaFixaTaxa: e.taxa,
+            rendaFixaVencimento: e.vencimento || undefined,
+            rendaFixaAvisos: avisos,
+          }
+        })
+      }
       const options = allOptionsForClass(cls)
       return options
         .map((opt) => ({ opt, qty: classQuantity(cls, opt.id) }))
         .filter(({ qty }) => qty > 0)
-        .map(({ opt, qty }) => ({
-          id: `${cls}:${opt.id}`,
-          assetClass: cls,
-          name: opt.name,
-          ticker: opt.ticker,
-          quantity: qty,
-          monthlyAmount: unitPrice(cls, opt) * qty,
-        }))
+        .map(({ opt, qty }) => {
+          const income = expectedIncome(cls, opt, qty)
+          const note =
+            income == null
+              ? undefined
+              : opt.nextPaymentDate
+                ? `próximo pagamento em ${formatPaymentDate(opt.nextPaymentDate)}`
+                : opt.dividendReferenceMonth
+                  ? `estimativa mensal, base ${formatReferenceMonth(opt.dividendReferenceMonth)}`
+                  : undefined
+          return {
+            id: `${cls}:${opt.id}`,
+            assetClass: cls,
+            name: opt.name,
+            ticker: opt.ticker,
+            quantity: qty,
+            monthlyAmount: unitPrice(cls, opt) * qty,
+            expectedIncome: income ?? undefined,
+            expectedIncomeNote: note,
+          }
+        })
     })
 
     onConfirm({
@@ -415,8 +535,137 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
           <RefreshPricesButton onRefreshed={() => Promise.all([refetchOptions(), refetchCompanies()])} />
 
           {activeClasses.map((cls) => {
-            const options = allOptionsForClass(cls)
             const classAmount = monthly * (percents[cls] / 100)
+
+            if (cls === 'Renda fixa') {
+              const rfFullyAllocated = rendaFixaRemaining < 0.005
+              return (
+                <div key={cls} className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-4">
+                  <div className="mb-1 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                      <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: ASSET_CLASS_COLORS[cls] }} />
+                      {cls}
+                    </div>
+                    <span className="text-xs text-slate-500">
+                      {percents[cls]}% · {formatBRLExact(classAmount)}/mês
+                    </span>
+                  </div>
+                  <div className="mb-3 flex items-center justify-between text-xs">
+                    <span className="text-slate-500">Renda fixa é OTC — descreva a aplicação em vez de escolher um preço de mercado</span>
+                    <span className={`font-medium ${rfFullyAllocated ? 'text-emerald-400' : 'text-slate-400'}`}>
+                      Restante: {formatBRLExact(rendaFixaRemaining)}
+                    </span>
+                  </div>
+
+                  {rendaFixaEntries.length > 0 && (
+                    <ul className="mb-3 space-y-2">
+                      {rendaFixaEntries.map((e) => (
+                        <li key={e.id} className="flex items-start justify-between gap-2 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-2 text-sm">
+                          <div>
+                            <div className="font-medium text-slate-200">
+                              {e.tipo} <span className="text-xs text-slate-500">— {e.taxa}</span>
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {e.vencimento && `Vencimento: ${formatPaymentDate(e.vencimento)} · `}
+                              {formatBRLExact(e.valor)}/mês
+                            </div>
+                            {(e.temIR || e.temTaxas || e.temCarencia) && (
+                              <div className="mt-0.5 flex flex-wrap gap-1">
+                                {e.temIR && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-300">Tem IR</span>}
+                                {e.temTaxas && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-300">Tem taxas</span>}
+                                {e.temCarencia && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-300">Tem carência</span>}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => removeRendaFixaEntry(e.id)}
+                            className="shrink-0 text-slate-600 hover:text-rose-400"
+                            aria-label={`Remover ${e.tipo}`}
+                          >
+                            <X size={13} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div className="space-y-2 rounded-lg border border-slate-700/60 bg-slate-900/60 p-3">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className="block text-xs">
+                        <span className="mb-1 block text-slate-400">Qual é a aplicação?</span>
+                        <select
+                          value={rfTipo}
+                          onChange={(e) => setRfTipo(e.target.value)}
+                          className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-sky-500"
+                        >
+                          {RENDA_FIXA_TIPOS.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block text-xs">
+                        <span className="mb-1 block text-slate-400">Qual é a taxa?</span>
+                        <input
+                          value={rfTaxa}
+                          onChange={(e) => setRfTaxa(e.target.value)}
+                          placeholder="ex: 100% do CDI, IPCA + 6%"
+                          className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-sky-500"
+                        />
+                      </label>
+                      <label className="block text-xs">
+                        <span className="mb-1 block text-slate-400">Prazo / data de vencimento</span>
+                        <input
+                          type="date"
+                          value={rfVencimento}
+                          onChange={(e) => setRfVencimento(e.target.value)}
+                          className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-sky-500 [color-scheme:dark]"
+                        />
+                      </label>
+                      <label className="block text-xs">
+                        <span className="mb-1 block text-slate-400">Valor mensal nesta aplicação</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={rfValor === 0 ? '' : rfValor}
+                          onChange={(e) => setRfValor(e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
+                          placeholder={formatBRLExact(rendaFixaRemaining)}
+                          className="w-full appearance-none rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 outline-none placeholder:text-slate-600 [-moz-appearance:textfield] focus:border-sky-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        />
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap gap-3 text-xs text-slate-300">
+                      <label className="flex items-center gap-1.5">
+                        <input type="checkbox" checked={rfTemIR} onChange={(e) => setRfTemIR(e.target.checked)} className="accent-sky-500" />
+                        Tem IR
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input type="checkbox" checked={rfTemTaxas} onChange={(e) => setRfTemTaxas(e.target.checked)} className="accent-sky-500" />
+                        Tem taxas
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input type="checkbox" checked={rfTemCarencia} onChange={(e) => setRfTemCarencia(e.target.checked)} className="accent-sky-500" />
+                        Tem carência
+                      </label>
+                    </div>
+                    <button
+                      onClick={addRendaFixaEntry}
+                      disabled={!rfTaxa.trim() || rfValor <= 0 || rfValor > rendaFixaRemaining + 0.005}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-300 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Plus size={14} /> Adicionar aplicação
+                    </button>
+                  </div>
+
+                  {rendaFixaEntries.length === 0 && (
+                    <p className="mt-2 text-xs text-amber-300">Descreva ao menos uma aplicação desta classe.</p>
+                  )}
+                </div>
+              )
+            }
+
+            const options = allOptionsForClass(cls)
             const cota = classAmount / MAX_ITEMS_PER_CLASS
             const spent = classSpent(cls, options)
             const remaining = Math.max(0, classAmount - spent)
@@ -430,17 +679,17 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                     {cls}
                   </div>
                   <span className="text-xs text-slate-500">
-                    {percents[cls]}% · {formatBRL(classAmount)}/mês
+                    {percents[cls]}% · {formatBRLExact(classAmount)}/mês
                   </span>
                 </div>
                 <div className="mb-3 flex items-center justify-between text-xs">
                   <span className="text-slate-500">
                     {options.some((o) => o.price != null)
                       ? 'Desconta o preço real × quantidade de cada ativo'
-                      : `${formatBRL(cota)} por unidade escolhida`}
+                      : `${formatBRLExact(cota)} por unidade escolhida`}
                   </span>
                   <span className={`font-medium ${fullyAllocated ? 'text-emerald-400' : 'text-slate-400'}`}>
-                    Restante: {formatBRL(remaining)}
+                    Restante: {formatBRLExact(remaining)}
                   </span>
                 </div>
                 {fullyAllocated && (
@@ -457,57 +706,76 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                     return (
                       <div
                         key={opt.id}
-                        className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-left transition-colors ${
+                        className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5 transition-colors ${
                           qty > 0 ? 'border-sky-500 bg-sky-500/10' : 'border-slate-700 hover:border-slate-600'
                         }`}
                       >
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="block text-sm font-medium text-slate-200">
-                              {opt.name}
-                              {opt.ticker && opt.ticker !== opt.name && <span className="ml-1 text-xs text-slate-500">({opt.ticker})</span>}
-                            </span>
-                            {qty > 0 && (
-                              <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
-                                -{formatBRL(unit * qty)}
+                        <div>
+                          <div className="text-sm font-medium text-slate-200">
+                            {opt.name}
+                            {opt.ticker && opt.ticker !== opt.name && <span className="ml-1 text-xs text-slate-500">{opt.ticker}</span>}
+                          </div>
+                          <div className="text-lg font-bold text-emerald-400">{formatBRLExact(unit)}</div>
+                          {opt.dividendYieldValue != null && opt.nextPaymentDate && (
+                            <div className="text-xs text-slate-400">
+                              <span>
+                                Paga ≈ {opt.dividendYieldValue.toFixed(1).replace('.', ',')}% a.a.
+                                {opt.realPaymentFrequency ? ` (${opt.realPaymentFrequency})` : ''}
                               </span>
-                            )}
-                          </div>
-                          <span className="block text-xs text-slate-500">{opt.description}</span>
-                          {opt.marketInfo && <span className="mt-0.5 block text-xs text-sky-400">{opt.marketInfo}</span>}
-                          {opt.payoutFrequency && (
-                            <span className="mt-0.5 block text-xs text-emerald-400">Recebe: {opt.payoutFrequency}</span>
+                              {opt.nextPaymentAmount != null && (
+                                <span className={qty > 0 ? 'block font-medium text-emerald-300' : 'block'}>
+                                  {qty > 0
+                                    ? `Você recebe ${formatBRLExact(opt.nextPaymentAmount * qty)}`
+                                    : `Próximo: ${formatBRLExact(opt.nextPaymentAmount)}/un.`}
+                                  {' em '}
+                                  {formatPaymentDate(opt.nextPaymentDate)}
+                                  {opt.nextPaymentLabel ? ` (${opt.nextPaymentLabel})` : ''}
+                                </span>
+                              )}
+                            </div>
                           )}
-                          <div className="mt-2 flex items-center gap-2">
-                            <button
-                              onClick={() => changeQuantity(cls, opt.id, -1)}
-                              disabled={qty === 0}
-                              aria-label={`Diminuir quantidade de ${opt.name}`}
-                              className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-slate-300 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-30"
-                            >
-                              <Minus size={12} />
-                            </button>
-                            <span className="w-5 text-center text-sm font-medium text-slate-200">{qty}</span>
-                            <button
-                              onClick={() => changeQuantity(cls, opt.id, 1)}
-                              disabled={!canIncrement}
-                              aria-label={`Aumentar quantidade de ${opt.name}`}
-                              className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-slate-300 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-30"
-                            >
-                              <Plus size={12} />
-                            </button>
-                            <span className="text-xs text-slate-500">{formatBRL(unit)}/un.</span>
-                          </div>
+                          {opt.dividendYieldValue != null && !opt.nextPaymentDate && opt.dividendReferenceMonth && (
+                            <div className="text-xs text-slate-400">
+                              <span>
+                                Rendeu {opt.dividendYieldValue.toFixed(2).replace('.', ',')}% em{' '}
+                                {formatReferenceMonth(opt.dividendReferenceMonth)} · Mensal
+                              </span>
+                              {qty > 0 && (
+                                <span className="block font-medium text-emerald-300">
+                                  Você recebe ≈ {formatBRLExact(unit * (opt.dividendYieldValue / 100) * qty)} em breve
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {isCustom && (
+                        <div className="flex shrink-0 items-center gap-1.5">
                           <button
-                            onClick={() => removeCustomOption(cls, opt.id)}
-                            className="shrink-0 text-slate-600 hover:text-rose-400"
-                            aria-label={`Remover ${opt.name}`}
+                            onClick={() => changeQuantity(cls, opt.id, -1)}
+                            disabled={qty === 0}
+                            aria-label={`Diminuir quantidade de ${opt.name}`}
+                            className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-slate-300 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-30"
                           >
-                            <X size={13} />
+                            <Minus size={12} />
                           </button>
-                        )}
+                          <span className="w-5 text-center text-sm font-medium text-slate-200">{qty}</span>
+                          <button
+                            onClick={() => changeQuantity(cls, opt.id, 1)}
+                            disabled={!canIncrement}
+                            aria-label={`Aumentar quantidade de ${opt.name}`}
+                            className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-slate-300 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            <Plus size={12} />
+                          </button>
+                          {isCustom && (
+                            <button
+                              onClick={() => removeCustomOption(cls, opt.id)}
+                              className="ml-1 text-slate-600 hover:text-rose-400"
+                              aria-label={`Remover ${opt.name}`}
+                            >
+                              <X size={13} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
@@ -576,6 +844,36 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
             <div className="mt-4 space-y-3">
               {activeClasses.map((cls) => {
                 const classAmount = monthly * (percents[cls] / 100)
+
+                if (cls === 'Renda fixa') {
+                  const unallocated = classAmount - rendaFixaSpent
+                  return (
+                    <div key={cls}>
+                      <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide" style={{ color: ASSET_CLASS_COLORS[cls] }}>
+                        {cls} — {percents[cls]}%
+                      </div>
+                      <ul className="space-y-1">
+                        {rendaFixaEntries.map((e) => (
+                          <li key={e.id} className="rounded-lg bg-slate-800/40 px-3 py-1.5 text-sm text-slate-300">
+                            <div className="flex items-center justify-between">
+                              <span>
+                                {e.tipo} <span className="text-xs text-slate-500">— {e.taxa}</span>
+                              </span>
+                              <span className="text-slate-500">{formatBRLExact(e.valor)}/mês</span>
+                            </div>
+                            {e.vencimento && <div className="text-xs text-slate-500">Vencimento: {formatPaymentDate(e.vencimento)}</div>}
+                          </li>
+                        ))}
+                      </ul>
+                      {unallocated > 0.005 && (
+                        <p className="mt-1 text-xs text-amber-300">
+                          {formatBRLExact(unallocated)}/mês desta classe ainda não foram atribuídos a nenhuma aplicação.
+                        </p>
+                      )}
+                    </div>
+                  )
+                }
+
                 const options = allOptionsForClass(cls)
                 const selectedOptions = options.filter((o) => classQuantity(cls, o.id) > 0)
                 const spent = classSpent(cls, options)
@@ -594,14 +892,14 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                               {opt.name}
                               {qty > 1 && <span className="ml-1 text-xs text-slate-500">×{qty}</span>}
                             </span>
-                            <span className="text-slate-500">{formatBRL(unitPrice(cls, opt) * qty)}/mês</span>
+                            <span className="text-slate-500">{formatBRLExact(unitPrice(cls, opt) * qty)}/mês</span>
                           </li>
                         )
                       })}
                     </ul>
                     {unallocated > 0.005 && (
                       <p className="mt-1 text-xs text-amber-300">
-                        {formatBRL(unallocated)}/mês desta classe ainda não foram atribuídos a nenhum ativo.
+                        {formatBRLExact(unallocated)}/mês desta classe ainda não foram atribuídos a nenhum ativo.
                       </p>
                     )}
                   </div>
@@ -609,6 +907,38 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
               })}
             </div>
           </div>
+
+          {(() => {
+            let total = 0
+            let withData = 0
+            let withoutData = 0
+            for (const cls of activeClasses) {
+              for (const opt of allOptionsForClass(cls)) {
+                const qty = classQuantity(cls, opt.id)
+                if (qty <= 0) continue
+                const income = expectedIncome(cls, opt, qty)
+                if (income != null) {
+                  total += income
+                  withData++
+                } else {
+                  withoutData++
+                }
+              }
+            }
+            if (withData === 0) return null
+            return (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-emerald-300">Proventos esperados</div>
+                <div className="text-2xl font-bold text-emerald-400">{formatBRLExact(total)}</div>
+                <p className="mt-1 text-xs text-emerald-200/80">
+                  Soma do próximo pagamento (ações) ou estimativa mensal (FIIs) de {withData}{' '}
+                  {withData === 1 ? 'ativo com dado real' : 'ativos com dado real'} de mercado.
+                  {withoutData > 0 &&
+                    ` Não inclui ${withoutData} ${withoutData === 1 ? 'ativo sem' : 'ativos sem'} dado real disponível.`}
+                </p>
+              </div>
+            )
+          })()}
 
           <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-4">
             <div className="mb-3 text-sm font-medium text-slate-300">Projeção de crescimento (simulação educacional)</div>

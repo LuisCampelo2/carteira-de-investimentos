@@ -54,6 +54,18 @@ export interface CarteiraItem {
   ticker?: string
   monthlyAmount: number
   quantity?: number
+  /** Real expected payout for this item (next payment × qty for stocks,
+   * or estimated monthly distribution × qty for FIIs) — only set when
+   * real market data was available, never estimated/invented. */
+  expectedIncome?: number
+  expectedIncomeNote?: string
+  /** Set only for "Renda fixa" items — these are user-described OTC products
+   * (CDB/LCI/LCA/Tesouro), not exchange-traded assets with a public unit
+   * price, so they're captured as a described application, not a quantity. */
+  rendaFixaTipo?: string
+  rendaFixaTaxa?: string
+  rendaFixaVencimento?: string
+  rendaFixaAvisos?: string[]
 }
 
 export interface CarteiraState {
@@ -77,6 +89,16 @@ export interface InvestmentOption {
   /** Real price per share/unit in R$, when known (e.g. stocks). Used to deduct
    * the actual value from the class budget instead of an even split. */
   price?: number
+  /** Real dividend yield (%), from brapi.dev (stocks, annual) or CVM (FIIs, monthly). */
+  dividendYieldValue?: number
+  /** Real next (or most recent) payment date/amount from brapi.dev's dividend calendar (stocks only). */
+  nextPaymentDate?: string
+  nextPaymentAmount?: number
+  nextPaymentLabel?: string
+  realPaymentFrequency?: string
+  /** "YYYY-MM-DD" reference month for dividendYieldValue when it's a FII's real
+   * monthly distribution from CVM — no exact payment date is available there. */
+  dividendReferenceMonth?: string
 }
 
 export interface Company {
@@ -106,4 +128,9 @@ export interface Company {
   priceApprox?: string
   priceValue?: number
   payoutFrequency?: string
+  dividendYieldValue?: number
+  nextPaymentDate?: string
+  nextPaymentAmount?: number
+  nextPaymentLabel?: string
+  realPaymentFrequency?: string
 }

@@ -64,3 +64,27 @@ ALTER TABLE companies ADD COLUMN IF NOT EXISTS payout_frequency text;
 -- needs the actual number to deduct the right amount when a stock is picked;
 -- price_approx alone can't be parsed reliably for that.
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS price_value numeric;
+
+-- Real payout data from brapi.dev (dividendYield + dividendsData modules),
+-- only ever set from the live API — never hand-typed — since B3 doesn't
+-- expose this for FIIs/ETFs on our plan and we don't want to guess it.
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS dividend_yield_value numeric;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS next_payment_date date;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS next_payment_amount numeric;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS next_payment_label text;
+-- Mensal/Trimestral/Semestral/Anual, inferido dos intervalos reais entre os
+-- pagamentos já anunciados (calculado no refresh, nunca digitado à mão).
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS payment_frequency text;
+
+-- Same idea for investment_options: only set for classes with a real, whole
+-- unit price a person actually buys (ETFs, FIIs) — left null for Renda
+-- fixa/Multimercado/Previdência/Debêntures (amount-based, not unit-priced)
+-- and for Criptomoedas (fractional by nature, doesn't fit a whole-unit
+-- quantity stepper), which keep the equal-share fallback instead.
+ALTER TABLE investment_options ADD COLUMN IF NOT EXISTS price_value numeric;
+
+-- Rendimento mensal real dos FIIs, direto do Informe Mensal que os fundos
+-- são obrigados a enviar à CVM (dados.cvm.gov.br) — só preenchido para os
+-- FIIs mapeados em FII_CNPJ_BY_ID (src/db/cvmFii.ts), nunca digitado à mão.
+ALTER TABLE investment_options ADD COLUMN IF NOT EXISTS dividend_yield_value numeric;
+ALTER TABLE investment_options ADD COLUMN IF NOT EXISTS dividend_reference_month text;

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { pool } from '../db/pool.js'
+import { fetchCvmFiiYields } from '../db/cvmFii.js'
 
 export const marketDataRouter = Router()
 
@@ -68,58 +69,214 @@ marketDataRouter.post('/refresh', async (_req, res) => {
 
   // Criptomoedas via CoinGecko — sem necessidade de chave.
   try {
-    const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd')
+    const ids = ['bitcoin', 'ethereum', 'solana', 'binancecoin', 'ripple']
+    const cgRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`)
     if (!cgRes.ok) throw new Error(`CoinGecko respondeu ${cgRes.status}`)
     const prices = (await cgRes.json()) as Record<string, { usd: number }>
 
-    await updateMarketInfo(
-      'bitcoin',
-      `≈ US$ ${prices.bitcoin.usd.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} (${tag}) — alta volatilidade.`,
-    )
-    await updateMarketInfo(
-      'ethereum',
-      `≈ US$ ${prices.ethereum.usd.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} (${tag}) — alta volatilidade.`,
-    )
-    updated.push('Criptomoedas (CoinGecko)')
+    const cryptoIdByOption: Record<string, string> = {
+      bitcoin: 'bitcoin',
+      ethereum: 'ethereum',
+      solana: 'solana',
+      bnb: 'binancecoin',
+      xrp: 'ripple',
+    }
+    let okCount = 0
+    for (const [optionId, cgId] of Object.entries(cryptoIdByOption)) {
+      const usd = prices[cgId]?.usd
+      if (typeof usd !== 'number') continue
+      await updateMarketInfo(
+        optionId,
+        `≈ US$ ${usd.toLocaleString('pt-BR', { maximumFractionDigits: usd < 10 ? 2 : 0 })} (${tag}) — alta volatilidade.`,
+      )
+      okCount++
+    }
+    if (okCount > 0) updated.push(`Criptomoedas (CoinGecko)`)
   } catch (err) {
     errors.push(`Criptomoedas (CoinGecko): ${(err as Error).message}`)
   }
 
-  // Preço das ações via brapi.dev — precisa de um token gratuito (brapi.dev) na env BRAPI_TOKEN.
+  // Preço de ações, ETFs e FIIs via brapi.dev — todos negociados por ticker na
+  // B3, então a mesma cotação de ações serve para os três. Precisa de um
+  // token gratuito (brapi.dev) na env BRAPI_TOKEN.
   const brapiToken = process.env.BRAPI_TOKEN
   if (brapiToken) {
+    async function fetchBrapiPrice(ticker: string): Promise<number> {
+      const brapiRes = await fetch(`https://brapi.dev/api/v2/stocks/quote?symbols=${ticker}`, {
+        headers: { Authorization: `Bearer ${brapiToken}` },
+      })
+      if (!brapiRes.ok) throw new Error(`status ${brapiRes.status}`)
+      const brapiData = (await brapiRes.json()) as { results?: { data?: { regularMarketPrice: number } }[] }
+      const price = brapiData.results?.[0]?.data?.regularMarketPrice
+      if (typeof price !== 'number') throw new Error('sem preço na resposta')
+      return price
+    }
+
+    interface CashDividend {
+      paymentDate: string
+      rate: number
+      label: string
+    }
+
+    interface DividendInfo {
+      dividendYield: number | null
+      nextPayment: CashDividend | null
+      frequencyLabel: string | null
+    }
+
+    // A partir dos intervalos reais entre os pagamentos já anunciados (não um
+    // texto digitado à mão), estima se a empresa paga mensal/trimestral/etc.
+    function inferFrequencyLabel(cashDividends: CashDividend[]): string | null {
+      if (cashDividends.length < 2) return null
+      const sortedDates = [...cashDividends]
+        .map((d) => new Date(d.paymentDate).getTime())
+        .sort((a, b) => a - b)
+      const gapsInDays: number[] = []
+      for (let i = 1; i < sortedDates.length; i++) {
+        gapsInDays.push((sortedDates[i] - sortedDates[i - 1]) / (1000 * 60 * 60 * 24))
+      }
+      gapsInDays.sort((a, b) => a - b)
+      const medianGap = gapsInDays[Math.floor(gapsInDays.length / 2)]
+      if (medianGap <= 45) return 'Mensal'
+      if (medianGap <= 135) return 'Trimestral'
+      if (medianGap <= 270) return 'Semestral'
+      return 'Anual'
+    }
+
+    // Rendimento + calendário de proventos — módulo pago na brapi.dev
+    // (plano Startup), então só funciona para os poucos tickers cobertos
+    // pela cota de amostra grátis. Chamada separada do preço de propósito:
+    // se essa falhar (o normal, no plano gratuito), o preço continua
+    // atualizando normalmente para todas as 29 empresas.
+    async function fetchDividendInfo(ticker: string): Promise<DividendInfo> {
+      const brapiRes = await fetch(
+        `https://brapi.dev/api/quote/${ticker}?modules=defaultKeyStatistics&dividends=true&range=1y&interval=1mo&token=${brapiToken}`,
+      )
+      if (!brapiRes.ok) throw new Error(`status ${brapiRes.status}`)
+      const brapiData = (await brapiRes.json()) as {
+        results?: {
+          defaultKeyStatistics?: { dividendYield?: number }
+          dividendsData?: { cashDividends?: CashDividend[] }
+        }[]
+      }
+      const result = brapiData.results?.[0]
+
+      const now = Date.now()
+      const cashDividends = result?.dividendsData?.cashDividends ?? []
+      // Entre os proventos já anunciados, pega o de data mais próxima —
+      // futura se houver, senão o mais recente já pago.
+      const future = cashDividends.filter((d) => new Date(d.paymentDate).getTime() >= now)
+      const nextPayment =
+        future.length > 0
+          ? future.reduce((a, b) => (new Date(a.paymentDate) < new Date(b.paymentDate) ? a : b))
+          : cashDividends.length > 0
+            ? cashDividends.reduce((a, b) => (new Date(a.paymentDate) > new Date(b.paymentDate) ? a : b))
+            : null
+
+      return {
+        dividendYield: result?.defaultKeyStatistics?.dividendYield ?? null,
+        nextPayment,
+        frequencyLabel: inferFrequencyLabel(cashDividends),
+      }
+    }
+
     try {
       // O plano gratuito do brapi.dev permite só 1 ativo por requisição, então busca uma por vez.
       const { rows: companies } = await pool.query('SELECT id, ticker FROM companies')
       let okCount = 0
+      let dividendOkCount = 0
       const stockErrors: string[] = []
       for (const company of companies) {
         try {
-          const brapiRes = await fetch(`https://brapi.dev/api/v2/stocks/quote?symbols=${company.ticker}`, {
-            headers: { Authorization: `Bearer ${brapiToken}` },
-          })
-          if (!brapiRes.ok) throw new Error(`status ${brapiRes.status}`)
-          const brapiData = (await brapiRes.json()) as { results?: { data?: { regularMarketPrice: number } }[] }
-          const price = brapiData.results?.[0]?.data?.regularMarketPrice
-          if (typeof price === 'number') {
-            await pool.query('UPDATE companies SET price_approx = $1, price_value = $2 WHERE id = $3', [
-              `R$ ${formatBRL(price)} (${tag})`,
-              price,
-              company.id,
-            ])
-            okCount++
-          }
+          const price = await fetchBrapiPrice(company.ticker)
+          await pool.query('UPDATE companies SET price_approx = $1, price_value = $2 WHERE id = $3', [
+            `R$ ${formatBRL(price)} (${tag})`,
+            price,
+            company.id,
+          ])
+          okCount++
         } catch (err) {
           stockErrors.push(`${company.ticker} (${(err as Error).message})`)
+          continue
+        }
+
+        try {
+          const dividend = await fetchDividendInfo(company.ticker)
+          await pool.query(
+            `UPDATE companies SET
+               dividend_yield_value = $1, next_payment_date = $2, next_payment_amount = $3,
+               next_payment_label = $4, payment_frequency = $5
+             WHERE id = $6`,
+            [
+              dividend.dividendYield != null ? dividend.dividendYield * 100 : null,
+              dividend.nextPayment ? dividend.nextPayment.paymentDate.slice(0, 10) : null,
+              dividend.nextPayment ? dividend.nextPayment.rate : null,
+              dividend.nextPayment ? dividend.nextPayment.label : null,
+              dividend.frequencyLabel,
+              company.id,
+            ],
+          )
+          dividendOkCount++
+        } catch {
+          // Normal no plano gratuito da brapi.dev para a maioria dos tickers — não é
+          // reportado como erro para não poluir a resposta com 25+ mensagens repetidas.
         }
       }
       if (okCount > 0) updated.push(`Preço de ${okCount} ação(ões) (brapi.dev)`)
+      if (dividendOkCount > 0) updated.push(`Dividendos/proventos reais de ${dividendOkCount} ação(ões) (brapi.dev)`)
       if (stockErrors.length > 0) errors.push(`Ações não atualizadas: ${stockErrors.join(', ')}.`)
+      if (dividendOkCount < companies.length) {
+        errors.push(
+          `Dividendos/proventos não disponíveis para ${companies.length - dividendOkCount} ação(ões) — esse dado é um módulo pago da brapi.dev (plano Startup), fora do nosso plano gratuito.`,
+        )
+      }
     } catch (err) {
       errors.push(`Ações (brapi.dev): ${(err as Error).message}`)
     }
+
+    try {
+      const { rows: fundOptions } = await pool.query(
+        `SELECT id, ticker, asset_class, market_info FROM investment_options
+         WHERE asset_class IN ('ETFs', 'FIIs') AND ticker IS NOT NULL`,
+      )
+      let okCount = 0
+      const fundErrors: string[] = []
+      for (const opt of fundOptions) {
+        try {
+          const price = await fetchBrapiPrice(opt.ticker)
+          // ETFs/FIIs guardam informação de índice/dividend yield em market_info
+          // (texto livre, não vem da brapi) — preserva esse texto, só atualiza o preço.
+          await pool.query('UPDATE investment_options SET price_value = $1 WHERE id = $2', [price, opt.id])
+          okCount++
+        } catch (err) {
+          fundErrors.push(`${opt.ticker} (${(err as Error).message})`)
+        }
+      }
+      if (okCount > 0) updated.push(`Preço de ${okCount} ETF(s)/FII(s) (brapi.dev)`)
+      if (fundErrors.length > 0) errors.push(`ETFs/FIIs não atualizados: ${fundErrors.join(', ')}.`)
+    } catch (err) {
+      errors.push(`ETFs/FIIs (brapi.dev): ${(err as Error).message}`)
+    }
   } else {
-    errors.push('Ações não atualizadas — configure BRAPI_TOKEN no backend/.env (gratuito em brapi.dev) para ativar.')
+    errors.push('Ações/ETFs/FIIs não atualizados — configure BRAPI_TOKEN no backend/.env (gratuito em brapi.dev) para ativar.')
+  }
+
+  // Rendimento mensal real dos FIIs via CVM (dados.cvm.gov.br) — gratuito e
+  // oficial, mas só cobre os FIIs mapeados manualmente (ver FII_CNPJ_BY_ID);
+  // não tem data exata de pagamento, só o % distribuído no mês de referência.
+  try {
+    const yields = await fetchCvmFiiYields()
+    const entries = Object.entries(yields)
+    for (const [id, info] of entries) {
+      await pool.query('UPDATE investment_options SET dividend_yield_value = $1, dividend_reference_month = $2 WHERE id = $3', [
+        info.yieldPercent,
+        info.referenceMonth,
+        id,
+      ])
+    }
+    if (entries.length > 0) updated.push(`Rendimento mensal real de ${entries.length} FII(s) (CVM)`)
+  } catch (err) {
+    errors.push(`Rendimento de FIIs (CVM): ${(err as Error).message}`)
   }
 
   res.json({ updated, errors, refreshedAt: new Date().toISOString() })

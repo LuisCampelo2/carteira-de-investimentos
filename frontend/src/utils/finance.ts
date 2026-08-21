@@ -119,3 +119,17 @@ export function simulateGrowth(
 export function formatBRL(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
 }
+
+// Same formatting, but keeps the exact cents — used for individual asset
+// prices and the class budget math, so what's shown always matches exactly
+// what gets deducted (formatBRL rounds to whole reais, which is fine for
+// large aggregate totals but hides the real price of an asset).
+export function formatBRLExact(value: number): string {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// "2026-08-31" -> "31/08/2026"
+export function formatPaymentDate(iso: string): string {
+  const [year, month, day] = iso.split('-')
+  return `${day}/${month}/${year}`
+}

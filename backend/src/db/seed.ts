@@ -5,11 +5,14 @@ import { investmentOptions, companies } from './seedData.js'
 async function seed() {
   for (const opt of investmentOptions) {
     await pool.query(
-      `INSERT INTO investment_options (id, asset_class, name, ticker, description, market_info, payout_frequency)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO investment_options (id, asset_class, name, ticker, description, market_info, payout_frequency, price_value)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (id) DO UPDATE SET
-         asset_class = $2, name = $3, ticker = $4, description = $5, market_info = $6, payout_frequency = $7`,
-      [opt.id, opt.assetClass, opt.name, opt.ticker ?? null, opt.description, opt.marketInfo ?? null, opt.payoutFrequency ?? null],
+         asset_class = $2, name = $3, ticker = $4, description = $5, market_info = $6, payout_frequency = $7, price_value = $8`,
+      [
+        opt.id, opt.assetClass, opt.name, opt.ticker ?? null, opt.description, opt.marketInfo ?? null,
+        opt.payoutFrequency ?? null, opt.priceValue ?? null,
+      ],
     )
   }
 

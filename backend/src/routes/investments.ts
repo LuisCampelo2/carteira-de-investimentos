@@ -14,6 +14,9 @@ investmentOptionsRouter.get('/', async (_req, res) => {
       description: row.description,
       marketInfo: row.market_info ?? undefined,
       payoutFrequency: row.payout_frequency ?? undefined,
+      price: row.price_value != null ? Number(row.price_value) : undefined,
+      dividendYieldValue: row.dividend_yield_value != null ? Number(row.dividend_yield_value) : undefined,
+      dividendReferenceMonth: row.dividend_reference_month ?? undefined,
     })),
   )
 })
@@ -50,6 +53,13 @@ companiesRouter.get('/', async (_req, res) => {
       priceApprox: row.price_approx ?? undefined,
       priceValue: row.price_value != null ? Number(row.price_value) : undefined,
       payoutFrequency: row.payout_frequency ?? undefined,
+      dividendYieldValue: row.dividend_yield_value != null ? Number(row.dividend_yield_value) : undefined,
+      nextPaymentDate: row.next_payment_date
+        ? new Date(row.next_payment_date).toISOString().slice(0, 10)
+        : undefined,
+      nextPaymentAmount: row.next_payment_amount != null ? Number(row.next_payment_amount) : undefined,
+      nextPaymentLabel: row.next_payment_label ?? undefined,
+      realPaymentFrequency: row.payment_frequency ?? undefined,
     })),
   )
 })

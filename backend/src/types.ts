@@ -5,6 +5,12 @@ export interface CarteiraItem {
   ticker?: string
   monthlyAmount: number
   quantity?: number
+  expectedIncome?: number
+  expectedIncomeNote?: string
+  rendaFixaTipo?: string
+  rendaFixaTaxa?: string
+  rendaFixaVencimento?: string
+  rendaFixaAvisos?: string[]
 }
 
 export interface CarteiraState {

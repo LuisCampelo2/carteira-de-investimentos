@@ -11,12 +11,14 @@
     "db:seed": "tsx src/db/seed.ts"
   },
   "dependencies": {
+    "adm-zip": "^0.6.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.5",
     "express": "^5.2.1",
     "pg": "^8.16.3"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
     "@types/node": "^24.13.3",
