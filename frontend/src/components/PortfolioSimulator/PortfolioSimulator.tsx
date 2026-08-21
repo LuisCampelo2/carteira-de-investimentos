@@ -740,11 +740,11 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                                 Rendeu {opt.dividendYieldValue.toFixed(2).replace('.', ',')}% em{' '}
                                 {formatReferenceMonth(opt.dividendReferenceMonth)} · Mensal
                               </span>
-                              {qty > 0 && (
-                                <span className="block font-medium text-emerald-300">
-                                  Você recebe ≈ {formatBRLExact(unit * (opt.dividendYieldValue / 100) * qty)} em breve
-                                </span>
-                              )}
+                              <span className={qty > 0 ? 'block font-medium text-emerald-300' : 'block'}>
+                                {qty > 0
+                                  ? `Você recebe ≈ ${formatBRLExact(unit * (opt.dividendYieldValue / 100) * qty)}/mês`
+                                  : `≈ ${formatBRLExact(unit * (opt.dividendYieldValue / 100))}/un. por mês`}
+                              </span>
                             </div>
                           )}
                         </div>
