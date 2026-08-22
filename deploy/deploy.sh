@@ -38,9 +38,13 @@ rm -rf node_modules package-lock.json frontend/node_modules backend/node_modules
 npm install
 
 # 4. Configurar backend/.env
+# A porta padrão 5432 pode já estar em uso (ex: um container Docker com
+# outro Postgres) — nesse caso o apt aloca a próxima porta livre pro
+# cluster que acabamos de criar. Detecta a porta real em vez de assumir 5432.
+PG_PORT=$(pg_lsclusters -h | awk '{print $3}' | head -n1)
 cat > backend/.env <<EOF
 PGHOST=localhost
-PGPORT=5432
+PGPORT=${PG_PORT}
 PGUSER=mapa_mental
 PGPASSWORD=${DB_PASSWORD}
 PGDATABASE=mapa_mental_investimento
