@@ -49,3 +49,4 @@ Sobe o frontend (`http://localhost:5173` por padrão) e o backend (`http://local
 ```
 npm run build
 ```
+# carteira-de-investimentos
