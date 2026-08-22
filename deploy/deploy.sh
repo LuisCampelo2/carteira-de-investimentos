@@ -11,14 +11,26 @@ curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt install -y nodejs postgresql postgresql-contrib nginx git
 npm install -g pm2
 
-# 2. Banco Postgres
-sudo -u postgres psql -c "CREATE USER mapa_mental WITH PASSWORD '${DB_PASSWORD}';"
-sudo -u postgres psql -c "CREATE DATABASE mapa_mental_investimento OWNER mapa_mental;"
+# 2. Banco Postgres (idempotente — seguro rodar de novo se já existir)
+sudo -u postgres psql -c "DO \$\$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'mapa_mental') THEN
+    CREATE ROLE mapa_mental WITH LOGIN PASSWORD '${DB_PASSWORD}';
+  ELSE
+    ALTER ROLE mapa_mental WITH LOGIN PASSWORD '${DB_PASSWORD}';
+  END IF;
+END \$\$;"
+sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname = 'mapa_mental_investimento'" | grep -q 1 || \
+  sudo -u postgres psql -c "CREATE DATABASE mapa_mental_investimento OWNER mapa_mental;"
 
-# 3. Clonar projeto
-mkdir -p /var/www && cd /var/www
-git clone https://github.com/LuisCampelo2/carteira-de-investimentos.git mapa-mental-investimento
-cd /var/www/mapa-mental-investimento
+# 3. Clonar projeto (idempotente — se já existe, atualiza em vez de clonar)
+mkdir -p /var/www
+if [ -d /var/www/mapa-mental-investimento/.git ]; then
+  cd /var/www/mapa-mental-investimento
+  git pull
+else
+  git clone https://github.com/LuisCampelo2/carteira-de-investimentos.git /var/www/mapa-mental-investimento
+  cd /var/www/mapa-mental-investimento
+fi
 npm install
 
 # 4. Configurar backend/.env
@@ -40,8 +52,8 @@ VITE_API_URL='' npm run build -w frontend
 npm run db:migrate
 npm run db:seed
 
-# 7. PM2
-pm2 start deploy/ecosystem.config.cjs
+# 7. PM2 (idempotente — reinicia se já estiver rodando)
+pm2 startOrRestart deploy/ecosystem.config.cjs
 pm2 save
 
 # 8. Nginx
