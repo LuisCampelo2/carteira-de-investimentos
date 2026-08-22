@@ -31,6 +31,10 @@ else
   git clone https://github.com/LuisCampelo2/carteira-de-investimentos.git /var/www/mapa-mental-investimento
   cd /var/www/mapa-mental-investimento
 fi
+# package-lock.json foi gerado no Windows do dev — reinstalar do zero aqui
+# evita um bug do npm que resolve o binário nativo errado do Vite/Rolldown
+# para linux-x64 (https://github.com/npm/cli/issues/4828).
+rm -rf node_modules package-lock.json frontend/node_modules backend/node_modules
 npm install
 
 # 4. Configurar backend/.env
