@@ -18,6 +18,8 @@ export interface CarteiraItem {
 }
 
 export interface CarteiraState {
+  id: number
+  name: string
   items: CarteiraItem[]
   monthlyContribution: number
   initialAmount: number

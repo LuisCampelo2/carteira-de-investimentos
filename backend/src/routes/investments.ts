@@ -17,6 +17,7 @@ investmentOptionsRouter.get('/', async (_req, res) => {
       price: row.price_value != null ? Number(row.price_value) : undefined,
       dividendYieldValue: row.dividend_yield_value != null ? Number(row.dividend_yield_value) : undefined,
       dividendReferenceMonth: row.dividend_reference_month ?? undefined,
+      rateValue: row.rate_value != null ? Number(row.rate_value) : undefined,
     })),
   )
 })

@@ -1,4 +1,4 @@
-import { BookOpen, PiggyBank, TrendingUp, Workflow } from 'lucide-react'
+import { BarChart3, BookOpen, PiggyBank, TrendingUp, Workflow } from 'lucide-react'
 
 interface HomeProps {
   completed: number
@@ -7,12 +7,16 @@ interface HomeProps {
   onOpenMapa: () => void
   onOpenGlossario: () => void
   onOpenCarteira: () => void
+  onOpenAtivos: () => void
 }
 
-export function Home({ completed, total, carteiraCount, onOpenMapa, onOpenGlossario, onOpenCarteira }: HomeProps) {
+export function Home({ completed, total, carteiraCount, onOpenMapa, onOpenGlossario, onOpenCarteira, onOpenAtivos }: HomeProps) {
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center overflow-y-auto bg-slate-950 px-4 py-10">
-      <div className="flex w-full max-w-3xl flex-col items-center text-center">
+    <div className="flex h-full w-full flex-col items-center overflow-y-auto bg-slate-950 px-4 py-10">
+      {/* my-auto (not justify-center on the parent) so it centers vertically
+          when it fits but stays fully scrollable instead of clipping its own
+          top edge when content is taller than the viewport (small phones). */}
+      <div className="my-auto flex w-full max-w-3xl flex-col items-center text-center">
         <div className="flex items-center gap-2 text-sky-400">
           <TrendingUp size={28} />
         </div>
@@ -27,7 +31,7 @@ export function Home({ completed, total, carteiraCount, onOpenMapa, onOpenGlossa
           <span>Aporte estudado: R$400/mês</span>
         </div>
 
-        <div className="mt-10 grid w-full gap-4 sm:grid-cols-3">
+        <div className="mt-10 grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <button
             onClick={onOpenMapa}
             className="group flex flex-col items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/60 px-6 py-8 text-center transition-colors hover:border-sky-500 hover:bg-sky-500/10"
@@ -64,6 +68,17 @@ export function Home({ completed, total, carteiraCount, onOpenMapa, onOpenGlossa
             </span>
             <span className="text-base font-semibold text-slate-100">Minha Carteira</span>
             <span className="text-xs text-slate-500">Monte e acompanhe sua carteira simulada</span>
+          </button>
+
+          <button
+            onClick={onOpenAtivos}
+            className="group flex flex-col items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/60 px-6 py-8 text-center transition-colors hover:border-sky-500 hover:bg-sky-500/10"
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/15 text-amber-400 transition-transform group-hover:scale-105">
+              <BarChart3 size={24} />
+            </span>
+            <span className="text-base font-semibold text-slate-100">Todos os Ativos</span>
+            <span className="text-xs text-slate-500">Veja e atualize os preços de cada classe</span>
           </button>
         </div>
       </div>

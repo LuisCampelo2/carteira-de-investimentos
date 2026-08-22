@@ -19,6 +19,19 @@ CREATE TABLE IF NOT EXISTS carteira (
 ALTER TABLE carteira ADD COLUMN IF NOT EXISTS estimated_annual_rate numeric;
 ALTER TABLE carteira ADD COLUMN IF NOT EXISTS estimated_annual_rate_coverage numeric;
 
+-- carteira started as a singleton (always id=1, one portfolio for the whole
+-- app). Migrating it to hold multiple named portfolios: drop the singleton
+-- constraint, add a name, and give id a real auto-increment sequence instead
+-- of the fixed default of 1 (safe to re-run: setval always recomputes from
+-- the current max id, never goes backwards).
+ALTER TABLE carteira DROP CONSTRAINT IF EXISTS carteira_singleton;
+ALTER TABLE carteira ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT 'Minha Carteira';
+ALTER TABLE carteira ALTER COLUMN id TYPE integer;
+ALTER TABLE carteira ALTER COLUMN id DROP DEFAULT;
+CREATE SEQUENCE IF NOT EXISTS carteira_id_seq OWNED BY carteira.id;
+SELECT setval('carteira_id_seq', GREATEST((SELECT COALESCE(MAX(id), 0) FROM carteira), 0) + 1, false);
+ALTER TABLE carteira ALTER COLUMN id SET DEFAULT nextval('carteira_id_seq');
+
 CREATE TABLE IF NOT EXISTS aula_progress (
   aula_id text PRIMARY KEY,
   status text NOT NULL DEFAULT 'not-started',
@@ -105,3 +118,10 @@ ALTER TABLE investment_options ADD COLUMN IF NOT EXISTS price_value numeric;
 -- FIIs mapeados em FII_CNPJ_BY_ID (src/db/cvmFii.ts), nunca digitado à mão.
 ALTER TABLE investment_options ADD COLUMN IF NOT EXISTS dividend_yield_value numeric;
 ALTER TABLE investment_options ADD COLUMN IF NOT EXISTS dividend_reference_month text;
+
+-- Real Selic/CDI/IPCA (% a.a.), only on the tesouro-selic/tesouro-ipca/cdb
+-- rows, live from Banco Central (same refresh that writes market_info's
+-- human-readable text) — lets the frontend compute a real annual rate for a
+-- user-typed Renda fixa entry like "105% do CDI" or "IPCA + 6%" instead of
+-- always falling back to the hypothetical risk rate.
+ALTER TABLE investment_options ADD COLUMN IF NOT EXISTS rate_value numeric;

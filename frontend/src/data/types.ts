@@ -73,6 +73,8 @@ export interface CarteiraItem {
 }
 
 export interface CarteiraState {
+  id: number
+  name: string
   items: CarteiraItem[]
   monthlyContribution: number
   initialAmount: number
@@ -105,6 +107,10 @@ export interface InvestmentOption {
   /** "YYYY-MM-DD" reference month for dividendYieldValue when it's a FII's real
    * monthly distribution from CVM — no exact payment date is available there. */
   dividendReferenceMonth?: string
+  /** Real Selic/CDI/IPCA (% a.a.) from Banco Central — only set on the
+   * tesouro-selic/tesouro-ipca/cdb rows, used to compute a real rate for a
+   * user-typed Renda fixa entry like "105% do CDI". */
+  rateValue?: number
 }
 
 export interface Company {

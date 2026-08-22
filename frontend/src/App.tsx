@@ -5,15 +5,16 @@ import { MobileTree } from './components/MindMap/MobileTree'
 import { LessonPanel } from './components/LessonPanel/LessonPanel'
 import { GlossaryView } from './components/Glossary/GlossaryView'
 import { MinhaCarteira } from './components/Carteira/MinhaCarteira'
+import { AtivosView } from './components/Ativos/AtivosView'
 import { Home } from './pages/Home'
 import { useProgress } from './hooks/useProgress'
-import { useCarteira } from './hooks/useCarteira'
+import { useCarteiras } from './hooks/useCarteiras'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { getAulaById } from './data/aulas'
 
 type Drawer = { type: 'aula'; aulaId: string; conceptId?: string } | null
-type View = 'home' | 'mapa' | 'glossario' | 'carteira'
-type NavState = { view: View; drawer: Drawer }
+type View = 'home' | 'mapa' | 'glossario' | 'carteira' | 'ativos'
+type NavState = { view: View; drawer: Drawer; carteiraId?: number }
 
 const HOME_STATE: NavState = { view: 'home', drawer: null }
 
@@ -26,6 +27,7 @@ function stateToPath(state: NavState): string {
     return state.drawer.conceptId ? `${base}?conceito=${encodeURIComponent(state.drawer.conceptId)}` : base
   }
   if (state.view === 'home') return '/'
+  if (state.view === 'carteira' && state.carteiraId != null) return `/carteira/${state.carteiraId}`
   return `/${state.view}`
 }
 
@@ -38,8 +40,10 @@ function pathToState(pathname: string, search: string): NavState {
       drawer: { type: 'aula', aulaId: decodeURIComponent(aulaMatch[1]), conceptId: conceptId ?? undefined },
     }
   }
+  const carteiraMatch = pathname.match(/^\/carteira\/(\d+)\/?$/)
+  if (carteiraMatch) return { view: 'carteira', drawer: null, carteiraId: Number(carteiraMatch[1]) }
   const view = pathname.replace(/^\/|\/$/g, '')
-  if (view === 'mapa' || view === 'glossario' || view === 'carteira') return { view, drawer: null }
+  if (view === 'mapa' || view === 'glossario' || view === 'carteira' || view === 'ativos') return { view, drawer: null }
   return HOME_STATE
 }
 
@@ -49,15 +53,16 @@ function currentLocationState(): NavState {
 
 export default function App() {
   const { getStatus, setStatus, markStarted, completedCount, total } = useProgress()
-  const { carteira, saveCarteira, removeItem, clearCarteira } = useCarteira()
+  const { carteiras, loading: carteirasLoading, createCarteira, updateCarteira, removeItem, deleteCarteira } = useCarteiras()
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const [view, setView] = useState<View>(() => currentLocationState().view)
   const [drawer, setDrawer] = useState<Drawer>(() => currentLocationState().drawer)
+  const [carteiraId, setCarteiraId] = useState<number | undefined>(() => currentLocationState().carteiraId)
 
   // Keep the browser's Back/Forward buttons (and a raw F5 reload) in sync
   // with in-app navigation. The popstate handler only ever calls
-  // setView/setDrawer directly (never navigate()), so there's no risk of it
-  // re-pushing the entry it came from.
+  // setView/setDrawer/setCarteiraId directly (never navigate()), so there's
+  // no risk of it re-pushing the entry it came from.
   useEffect(() => {
     const initial = currentLocationState()
     window.history.replaceState(initial, '', stateToPath(initial))
@@ -67,6 +72,7 @@ export default function App() {
       const state = (e.state as NavState | null) ?? currentLocationState()
       setView(state.view)
       setDrawer(state.drawer)
+      setCarteiraId(state.carteiraId)
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
@@ -76,6 +82,7 @@ export default function App() {
   const navigate = useCallback((next: NavState) => {
     setView(next.view)
     setDrawer(next.drawer)
+    setCarteiraId(next.carteiraId)
     window.history.pushState(next, '', stateToPath(next))
   }, [])
 
@@ -97,6 +104,11 @@ export default function App() {
 
   const openGlossary = useCallback(() => navigate({ view: 'glossario', drawer: null }), [navigate])
   const openCarteira = useCallback(() => navigate({ view: 'carteira', drawer: null }), [navigate])
+  const selectCarteira = useCallback(
+    (id: number | null) => navigate({ view: 'carteira', drawer: null, carteiraId: id ?? undefined }),
+    [navigate],
+  )
+  const openAtivos = useCallback(() => navigate({ view: 'ativos', drawer: null }), [navigate])
   const closeDrawer = useCallback(() => navigate({ view: 'mapa', drawer: null }), [navigate])
   const goHome = useCallback(() => navigate(HOME_STATE), [navigate])
   const goToMapa = useCallback(() => navigate({ view: 'mapa', drawer: null }), [navigate])
@@ -118,10 +130,11 @@ export default function App() {
         <Home
           completed={completedCount}
           total={total}
-          carteiraCount={carteira?.items.length ?? 0}
+          carteiraCount={carteiras.length}
           onOpenMapa={goToMapa}
           onOpenGlossario={openGlossary}
           onOpenCarteira={openCarteira}
+          onOpenAtivos={openAtivos}
         />
       </div>
     )
@@ -132,10 +145,11 @@ export default function App() {
       <Header
         completed={completedCount}
         total={total}
-        carteiraCount={carteira?.items.length ?? 0}
+        carteiraCount={carteiras.length}
         onSelectSearch={openConcept}
         onOpenGlossary={openGlossary}
         onOpenCarteira={openCarteira}
+        onOpenAtivos={openAtivos}
         onGoHome={goHome}
       />
 
@@ -162,8 +176,7 @@ export default function App() {
                       onClose={closeDrawer}
                       focusConceptId={drawer.conceptId}
                       onAddedToCarteira={(next) => {
-                        saveCarteira(next)
-                        openCarteira()
+                        createCarteira(next).then(() => openCarteira())
                       }}
                     />
                   )}
@@ -182,12 +195,22 @@ export default function App() {
         {view === 'carteira' && (
           <div className="mx-auto h-full w-full max-w-3xl">
             <MinhaCarteira
-              carteira={carteira}
+              carteiras={carteiras}
+              loading={carteirasLoading}
+              selectedId={carteiraId ?? null}
+              onSelectCarteira={selectCarteira}
               onClose={goHome}
               onRemoveItem={removeItem}
-              onSaveCarteira={saveCarteira}
-              onClearCarteira={clearCarteira}
+              onCreateCarteira={createCarteira}
+              onUpdateCarteira={updateCarteira}
+              onDeleteCarteira={deleteCarteira}
             />
+          </div>
+        )}
+
+        {view === 'ativos' && (
+          <div className="mx-auto h-full w-full max-w-4xl">
+            <AtivosView onClose={goHome} />
           </div>
         )}
       </div>

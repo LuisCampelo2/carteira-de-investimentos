@@ -37,10 +37,28 @@ const MAX_ITEMS_PER_CLASS = 4
 // unit price the way there is for a stock. So instead of the price+quantity
 // model used for exchange-traded classes, it's captured as a described
 // application: what it is, the rate, the maturity, and any IR/fees/lock-up.
+//
+// The rate itself is captured as a structured {taxaTipo, taxaValor} — a
+// number field plus a select for what it's relative to — instead of a free
+// text field, so there's no ambiguous text to parse (e.g. typing "100"
+// alone, meaning "100% do CDI" but missing the "% do CDI", used to silently
+// fall back to the hypothetical rate with no way to tell why).
+type TaxaTipo = 'pct_cdi' | 'pct_selic' | 'cdi_spread' | 'selic_spread' | 'ipca_spread' | 'flat'
+
+const TAXA_TIPO_LABELS: Record<TaxaTipo, string> = {
+  pct_cdi: '% do CDI',
+  pct_selic: '% da Selic',
+  cdi_spread: 'CDI + % a.a.',
+  selic_spread: 'Selic + % a.a.',
+  ipca_spread: 'IPCA + % a.a.',
+  flat: 'Taxa fixa (% a.a.)',
+}
+
 interface RendaFixaEntry {
   id: string
   tipo: string
-  taxa: string
+  taxaTipo: TaxaTipo
+  taxaValor: number
   vencimento: string
   temIR: boolean
   temTaxas: boolean
@@ -49,6 +67,40 @@ interface RendaFixaEntry {
 }
 
 const RENDA_FIXA_TIPOS = ['CDB', 'LCI', 'LCA', 'Tesouro Selic', 'Tesouro IPCA+', 'Tesouro Prefixado', 'Debênture', 'Outro']
+
+// Real Selic/CDI/IPCA (% a.a.), do Banco Central via /refresh — base pra
+// calcular a taxa real de um item de Renda fixa a partir de {taxaTipo, taxaValor}.
+interface BaseRates {
+  cdi?: number
+  selic?: number
+  ipca?: number
+}
+
+function formatTaxaLabel(tipo: TaxaTipo, valor: number): string {
+  const v = valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+  switch (tipo) {
+    case 'pct_cdi': return `${v}% do CDI`
+    case 'pct_selic': return `${v}% da Selic`
+    case 'cdi_spread': return `CDI + ${v}% a.a.`
+    case 'selic_spread': return `Selic + ${v}% a.a.`
+    case 'ipca_spread': return `IPCA + ${v}% a.a.`
+    case 'flat': return `${v}% a.a.`
+  }
+}
+
+// Determinístico — não tem texto pra interpretar. Só retorna null quando o
+// índice de referência (CDI/Selic/IPCA) ainda não carregou do backend; nesse
+// caso o item cai na taxa hipotética até os dados reais chegarem.
+function computeTaxaRate(tipo: TaxaTipo, valor: number, rates: BaseRates): number | null {
+  switch (tipo) {
+    case 'pct_cdi': return rates.cdi == null ? null : rates.cdi * (valor / 100)
+    case 'pct_selic': return rates.selic == null ? null : rates.selic * (valor / 100)
+    case 'cdi_spread': return rates.cdi == null ? null : rates.cdi + valor
+    case 'selic_spread': return rates.selic == null ? null : rates.selic + valor
+    case 'ipca_spread': return rates.ipca == null ? null : rates.ipca + valor
+    case 'flat': return valor
+  }
+}
 
 type Step = 'alocacao' | 'ativos' | 'resumo'
 
@@ -62,6 +114,7 @@ const STEP_LABELS: Record<Step, string> = { alocacao: '1. Alocação', ativos: '
 const DRAFT_KEY = 'portfolioSimulatorDraft'
 
 interface SimulatorDraft {
+  name: string
   step: Step
   initial: number
   monthly: number
@@ -76,7 +129,15 @@ interface SimulatorDraft {
 function loadDraft(): SimulatorDraft | null {
   try {
     const raw = sessionStorage.getItem(DRAFT_KEY)
-    return raw ? (JSON.parse(raw) as SimulatorDraft) : null
+    if (!raw) return null
+    const draft = JSON.parse(raw) as SimulatorDraft
+    // Descarta rascunhos de um formato antigo do campo de taxa (texto livre em
+    // vez de {taxaTipo, taxaValor}) — evita restaurar um formato que quebraria
+    // formatTaxaLabel/computeTaxaRate.
+    if (draft.rendaFixaEntries?.some((e) => typeof (e as { taxaTipo?: unknown }).taxaTipo !== 'string')) {
+      draft.rendaFixaEntries = []
+    }
+    return draft
   } catch {
     return null
   }
@@ -98,9 +159,23 @@ function clearDraft() {
   }
 }
 
-export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: CarteiraState) => void }) {
+export function PortfolioSimulator({
+  onConfirm,
+  defaultName,
+}: {
+  onConfirm: (carteira: Omit<CarteiraState, 'id'>) => void
+  /** Pre-fills the name field — used when "Refazer simulação" replaces an
+   * existing carteira's data, so the name carries over instead of starting blank. */
+  defaultName?: string
+}) {
   const { byClass: baseOptionsByClass, loading: optionsLoading, refetch: refetchOptions } = useInvestmentOptions()
   const { companies, loading: companiesLoading, refetch: refetchCompanies } = useCompanies()
+
+  const baseRates: BaseRates = useMemo(() => {
+    const rf = baseOptionsByClass['Renda fixa'] ?? []
+    const find = (id: string) => rf.find((o) => o.id === id)?.rateValue
+    return { cdi: find('cdb'), selic: find('tesouro-selic'), ipca: find('tesouro-ipca') }
+  }, [baseOptionsByClass])
 
   const optionsForClass = (cls: AssetClass): InvestmentOption[] => {
     if (cls === 'Ações') {
@@ -126,6 +201,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
 
   const [initialDraft] = useState<SimulatorDraft | null>(loadDraft)
 
+  const [name, setName] = useState(initialDraft?.name ?? defaultName ?? '')
   const [step, setStep] = useState<Step>(initialDraft?.step ?? 'alocacao')
   const [initial, setInitial] = useState(initialDraft?.initial ?? 0)
   const [monthly, setMonthly] = useState(initialDraft?.monthly ?? 0)
@@ -156,7 +232,8 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   )
   const [rendaFixaEntries, setRendaFixaEntries] = useState<RendaFixaEntry[]>(initialDraft?.rendaFixaEntries ?? [])
   const [rfTipo, setRfTipo] = useState(RENDA_FIXA_TIPOS[0])
-  const [rfTaxa, setRfTaxa] = useState('')
+  const [rfTaxaTipo, setRfTaxaTipo] = useState<TaxaTipo>('pct_cdi')
+  const [rfTaxaValor, setRfTaxaValor] = useState(0)
   const [rfVencimento, setRfVencimento] = useState('')
   const [rfTemIR, setRfTemIR] = useState(true)
   const [rfTemTaxas, setRfTemTaxas] = useState(false)
@@ -164,8 +241,8 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   const [rfValor, setRfValor] = useState(0)
 
   useEffect(() => {
-    saveDraft({ step, initial, monthly, years, percents, addedClasses, quantities, customOptions, rendaFixaEntries })
-  }, [step, initial, monthly, years, percents, addedClasses, quantities, customOptions, rendaFixaEntries])
+    saveDraft({ name, step, initial, monthly, years, percents, addedClasses, quantities, customOptions, rendaFixaEntries })
+  }, [name, step, initial, monthly, years, percents, addedClasses, quantities, customOptions, rendaFixaEntries])
 
   const allOptionsForClass = (cls: AssetClass): InvestmentOption[] => [...optionsForClass(cls), ...customOptions[cls]]
 
@@ -240,7 +317,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
   const rendaFixaRemaining = Math.max(0, monthly * (percents['Renda fixa'] / 100) - rendaFixaSpent)
 
   const addRendaFixaEntry = () => {
-    if (!rfTaxa.trim() || rfValor <= 0 || rfValor > rendaFixaRemaining + 0.005) return
+    if (rfValor <= 0 || rfValor > rendaFixaRemaining + 0.005) return
     const avisos: string[] = []
     if (rfTemIR) avisos.push('Tem IR')
     if (rfTemTaxas) avisos.push('Tem taxas')
@@ -250,7 +327,8 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
       {
         id: `rf-${Date.now()}`,
         tipo: rfTipo,
-        taxa: rfTaxa.trim(),
+        taxaTipo: rfTaxaTipo,
+        taxaValor: rfTaxaValor,
         vencimento: rfVencimento,
         temIR: rfTemIR,
         temTaxas: rfTemTaxas,
@@ -258,7 +336,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
         valor: rfValor,
       },
     ])
-    setRfTaxa('')
+    setRfTaxaValor(0)
     setRfVencimento('')
     setRfValor(0)
   }
@@ -310,7 +388,9 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
 
       if (cls === 'Renda fixa') {
         for (const e of rendaFixaEntries) {
-          if (e.valor > 0) streams.push({ monthlyAmount: e.valor, annualRate: fallbackRate, real: false })
+          if (e.valor <= 0) continue
+          const realRate = computeTaxaRate(e.taxaTipo, e.taxaValor, baseRates)
+          streams.push({ monthlyAmount: e.valor, annualRate: (realRate ?? fallbackRate * 100) / 100, real: realRate != null })
         }
         const leftover = classAmount - rendaFixaSpent
         if (leftover > 0.005) streams.push({ monthlyAmount: leftover, annualRate: fallbackRate, real: false })
@@ -333,7 +413,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
 
     return streams
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeClasses, quantities, customOptions, rendaFixaEntries, rendaFixaSpent, monthly, percents, risk])
+  }, [activeClasses, quantities, customOptions, rendaFixaEntries, rendaFixaSpent, monthly, percents, risk, baseRates])
 
   // Só para exibir um resumo em % — a projeção em si soma cada stream acima
   // já composto na sua própria taxa, não essa média.
@@ -377,16 +457,17 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
           if (e.temIR) avisos.push('Tem IR')
           if (e.temTaxas) avisos.push('Tem taxas')
           if (e.temCarencia) avisos.push('Tem carência')
+          const taxaLabel = formatTaxaLabel(e.taxaTipo, e.taxaValor)
           return {
             id: e.id,
             assetClass: cls,
-            name: `${e.tipo} — ${e.taxa}`,
+            name: `${e.tipo} — ${taxaLabel}`,
             monthlyAmount: e.valor,
             rendaFixaTipo: e.tipo,
-            rendaFixaTaxa: e.taxa,
+            rendaFixaTaxa: taxaLabel,
             rendaFixaVencimento: e.vencimento || undefined,
             rendaFixaAvisos: avisos,
-            estimatedAnnualRate: ANNUAL_RATE_BY_RISK[risk] * 100,
+            estimatedAnnualRate: computeTaxaRate(e.taxaTipo, e.taxaValor, baseRates) ?? ANNUAL_RATE_BY_RISK[risk] * 100,
           }
         })
       }
@@ -420,6 +501,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
 
     clearDraft()
     onConfirm({
+      name: name.trim() || 'Minha Carteira',
       items,
       monthlyContribution: monthly,
       initialAmount: initial,
@@ -459,7 +541,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
 
       {step === 'alocacao' && (
         <div className="animate-fade-in space-y-5">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="block text-sm">
               <span className="mb-1 block text-slate-400">Patrimônio inicial</span>
               <input
@@ -608,7 +690,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                       {percents[cls]}% · {formatBRLExact(classAmount)}/mês
                     </span>
                   </div>
-                  <div className="mb-3 flex items-center justify-between text-xs">
+                  <div className="mb-3 flex flex-col gap-0.5 text-xs sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                     <span className="text-slate-500">Renda fixa é OTC — descreva a aplicação em vez de escolher um preço de mercado</span>
                     <span className={`font-medium ${rfFullyAllocated ? 'text-emerald-400' : 'text-slate-400'}`}>
                       Restante: {formatBRLExact(rendaFixaRemaining)}
@@ -621,12 +703,20 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                         <li key={e.id} className="flex items-start justify-between gap-2 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-2 text-sm">
                           <div>
                             <div className="font-medium text-slate-200">
-                              {e.tipo} <span className="text-xs text-slate-500">— {e.taxa}</span>
+                              {e.tipo} <span className="text-xs text-slate-500">— {formatTaxaLabel(e.taxaTipo, e.taxaValor)}</span>
                             </div>
                             <div className="text-xs text-slate-500">
                               {e.vencimento && `Vencimento: ${formatPaymentDate(e.vencimento)} · `}
                               {formatBRLExact(e.valor)}/mês
                             </div>
+                            {(() => {
+                              const realRate = computeTaxaRate(e.taxaTipo, e.taxaValor, baseRates)
+                              return realRate != null ? (
+                                <div className="text-xs text-emerald-400">≈{realRate.toFixed(1).replace('.', ',')}% a.a. real</div>
+                              ) : (
+                                <div className="text-xs text-slate-600">Índice ainda não carregado — projeção usa taxa hipotética</div>
+                              )
+                            })()}
                             {(e.temIR || e.temTaxas || e.temCarencia) && (
                               <div className="mt-0.5 flex flex-wrap gap-1">
                                 {e.temIR && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-300">Tem IR</span>}
@@ -648,7 +738,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                   )}
 
                   <div className="space-y-2 rounded-lg border border-slate-700/60 bg-slate-900/60 p-3">
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <label className="block text-xs">
                         <span className="mb-1 block text-slate-400">Qual é a aplicação?</span>
                         <select
@@ -665,12 +755,29 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                       </label>
                       <label className="block text-xs">
                         <span className="mb-1 block text-slate-400">Qual é a taxa?</span>
-                        <input
-                          value={rfTaxa}
-                          onChange={(e) => setRfTaxa(e.target.value)}
-                          placeholder="ex: 100% do CDI, IPCA + 6%"
-                          className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-sky-500"
-                        />
+                        <div className="flex gap-1.5">
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            inputMode="decimal"
+                            value={rfTaxaValor === 0 ? '' : rfTaxaValor}
+                            onChange={(e) => setRfTaxaValor(e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
+                            placeholder="ex: 100"
+                            className="w-20 shrink-0 appearance-none rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 outline-none placeholder:text-slate-600 [-moz-appearance:textfield] focus:border-sky-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          />
+                          <select
+                            value={rfTaxaTipo}
+                            onChange={(e) => setRfTaxaTipo(e.target.value as TaxaTipo)}
+                            className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-sky-500"
+                          >
+                            {(Object.keys(TAXA_TIPO_LABELS) as TaxaTipo[]).map((t) => (
+                              <option key={t} value={t}>
+                                {TAXA_TIPO_LABELS[t]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </label>
                       <label className="block text-xs">
                         <span className="mb-1 block text-slate-400">Prazo / data de vencimento</span>
@@ -709,7 +816,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                     </div>
                     <button
                       onClick={addRendaFixaEntry}
-                      disabled={!rfTaxa.trim() || rfValor <= 0 || rfValor > rendaFixaRemaining + 0.005}
+                      disabled={rfValor <= 0 || rfValor > rendaFixaRemaining + 0.005}
                       className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-300 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <Plus size={14} /> Adicionar aplicação
@@ -745,7 +852,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                     {percents[cls]}% · {formatBRLExact(classAmount)}/mês
                   </span>
                 </div>
-                <div className="mb-3 flex items-center justify-between text-xs">
+                <div className="mb-3 flex flex-col gap-0.5 text-xs sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                   <span className="text-slate-500">
                     {options.some((o) => o.price != null)
                       ? 'Desconta o preço real × quantidade de cada ativo'
@@ -766,7 +873,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                     Valor da classe totalmente distribuído. Reduza a quantidade de um ativo para ajustar outro.
                   </p>
                 )}
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {options.map((opt) => {
                     const qty = classQuantity(cls, opt.id)
                     const isCustom = opt.id.startsWith('custom-')
@@ -919,6 +1026,16 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
 
       {step === 'resumo' && (
         <div className="animate-fade-in space-y-5">
+          <label className="block text-sm">
+            <span className="mb-1 block text-slate-400">Nome da carteira</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="ex: Carteira conservadora, Aposentadoria..."
+              className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-200 outline-none placeholder:text-slate-600 focus:border-sky-500"
+            />
+          </label>
+
           <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-300">
               <PiggyBank size={16} className="text-emerald-400" />
@@ -945,7 +1062,7 @@ export function PortfolioSimulator({ onConfirm }: { onConfirm: (carteira: Cartei
                           <li key={e.id} className="rounded-lg bg-slate-800/40 px-3 py-1.5 text-sm text-slate-300">
                             <div className="flex items-center justify-between">
                               <span>
-                                {e.tipo} <span className="text-xs text-slate-500">— {e.taxa}</span>
+                                {e.tipo} <span className="text-xs text-slate-500">— {formatTaxaLabel(e.taxaTipo, e.taxaValor)}</span>
                               </span>
                               <span className="text-slate-500">{formatBRLExact(e.valor)}/mês</span>
                             </div>

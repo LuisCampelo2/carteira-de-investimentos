@@ -86,7 +86,7 @@ export function ContentBlockView({ block }: { block: ContentBlock }) {
 
     case 'compare':
       return (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {block.items.map((item, i) => (
             <div key={i} className="rounded-lg border border-slate-700/60 bg-slate-800/40 px-3 py-2.5">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{item.label}</div>

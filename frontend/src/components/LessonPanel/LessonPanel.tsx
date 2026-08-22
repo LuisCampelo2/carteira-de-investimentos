@@ -27,7 +27,7 @@ export function LessonPanel({
   onSetStatus: (status: ProgressStatus) => void
   onClose: () => void
   focusConceptId?: string | null
-  onAddedToCarteira?: (carteira: CarteiraState) => void
+  onAddedToCarteira?: (carteira: Omit<CarteiraState, 'id'>) => void
 }) {
   const quiz = getQuizByAulaId(aula.id)
   const conceptRefs = useRef<Record<string, HTMLDivElement | null>>({})

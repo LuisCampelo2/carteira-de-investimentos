@@ -15,7 +15,7 @@ export function SearchBar({ onSelect }: { onSelect: (aulaId: string, conceptId: 
   }
 
   return (
-    <div className="relative w-full max-w-sm">
+    <div className="relative min-w-0 flex-1 sm:max-w-sm">
       <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-1.5">
         <Search size={15} className="shrink-0 text-slate-500" />
         <input
@@ -25,7 +25,7 @@ export function SearchBar({ onSelect }: { onSelect: (aulaId: string, conceptId: 
           onFocus={() => setFocused(true)}
           onBlur={() => setTimeout(() => setFocused(false), 150)}
           placeholder="Pesquisar conceitos (ex: P/L)"
-          className="w-full bg-transparent text-sm text-slate-200 outline-none placeholder:text-slate-600"
+          className="w-full min-w-0 bg-transparent text-sm text-slate-200 outline-none placeholder:text-slate-600"
         />
         {query && (
           <button onClick={clear} className="shrink-0 text-slate-500 hover:text-slate-300">

@@ -77,3 +77,52 @@ body {
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }
+
+/*
+ * "Baixar PDF" on Minha Carteira just calls window.print() — no PDF library
+ * needed, since every browser's print dialog already offers "Salvar como
+ * PDF" as a destination. This block isolates .print-area (hides everything
+ * else via visibility, matching the standard print-isolation pattern so
+ * layout/overflow from the app shell doesn't clip it) and reworks the
+ * dark-theme slate colors for a white page, since the app is dark-themed
+ * and most browsers skip background colors on print by default.
+ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+  .print-area [class*='bg-slate-'],
+  .print-area [class*='bg-emerald-500/10'],
+  .print-area [class*='bg-amber-500/10'] {
+    background: transparent !important;
+  }
+  .print-area [class*='border-slate-'] {
+    border-color: #cbd5e1 !important;
+  }
+  .print-area [class*='text-slate-1'],
+  .print-area [class*='text-slate-2'],
+  .print-area [class*='text-slate-3'] {
+    color: #1e293b !important;
+  }
+  .print-area [class*='text-slate-4'],
+  .print-area [class*='text-slate-5'],
+  .print-area [class*='text-slate-6'] {
+    color: #475569 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

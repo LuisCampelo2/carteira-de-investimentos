@@ -58,7 +58,7 @@ function CompanyDetail({ company }: { company: Company }) {
 
       <p className="text-sm text-slate-300"><span className="font-medium text-slate-200">Perspectivas: </span>{company.outlook}</p>
 
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5">
           <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-300">
             <CheckCircle2 size={14} /> Pontos positivos

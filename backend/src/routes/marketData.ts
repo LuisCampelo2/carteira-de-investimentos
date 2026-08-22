@@ -23,8 +23,35 @@ async function fetchBcbSeries(code: number): Promise<number> {
   return Number(row.valor)
 }
 
+function formatBcbDate(d: Date): string {
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+}
+
+// CDI acumulado nos últimos 12 meses — composto a partir dos ~252 pregões
+// diários reais (não extrapolado a partir do print de um único dia, que fica
+// bem abaixo do acumulado real num ciclo de corte de juros, já que ignora
+// que a Selic estava mais alta há alguns meses). É essa a taxa que
+// corretoras/bancos e o próprio mercado chamam de "a taxa do CDI".
+async function fetchCdiAccumulated12m(): Promise<number> {
+  const end = new Date()
+  const start = new Date(end)
+  start.setFullYear(start.getFullYear() - 1)
+  const res = await fetch(
+    `https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados?dataInicial=${formatBcbDate(start)}&dataFinal=${formatBcbDate(end)}&formato=json`,
+  )
+  if (!res.ok) throw new Error(`BCB CDI (12m) respondeu ${res.status}`)
+  const rows = (await res.json()) as { data: string; valor: string }[]
+  if (rows.length === 0) throw new Error('BCB CDI (12m) sem dados')
+  const accumulated = rows.reduce((product, row) => product * (1 + Number(row.valor) / 100), 1)
+  return (accumulated - 1) * 100
+}
+
 async function updateMarketInfo(id: string, marketInfo: string) {
   await pool.query('UPDATE investment_options SET market_info = $1 WHERE id = $2', [marketInfo, id])
+}
+
+async function updateRateValue(id: string, rateValue: number) {
+  await pool.query('UPDATE investment_options SET rate_value = $1 WHERE id = $2', [rateValue, id])
 }
 
 marketDataRouter.post('/refresh', async (_req, res) => {
@@ -34,25 +61,27 @@ marketDataRouter.post('/refresh', async (_req, res) => {
 
   // Selic, CDI e IPCA via API pública do Banco Central (SGS) — sem necessidade de chave.
   try {
-    const [selic, cdiDaily, ipca12m] = await Promise.all([
+    const [selic, cdiAcumulado12m, ipca12m] = await Promise.all([
       fetchBcbSeries(432), // Meta Selic (% a.a.)
-      fetchBcbSeries(12), // CDI (% a.d.)
+      fetchCdiAccumulated12m(), // CDI acumulado 12 meses (% a.a.), composto dos pregões diários reais
       fetchBcbSeries(13522), // IPCA acumulado 12 meses (% a.a.)
     ])
-    const cdiAnual = (Math.pow(1 + cdiDaily / 100, 252) - 1) * 100
 
     await updateMarketInfo('tesouro-selic', `Selic atual: ${formatBRL(selic)}% a.a. (Copom, ${tag}).`)
+    await updateRateValue('tesouro-selic', selic)
     await updateMarketInfo(
       'tesouro-ipca',
       `IPCA acumulado 12 meses: ≈ ${formatBRL(ipca12m)}% (${tag}), mais a taxa fixa do título.`,
     )
+    await updateRateValue('tesouro-ipca', ipca12m)
     await updateMarketInfo(
       'cdb',
-      `CDI atual ≈ ${formatBRL(cdiAnual)}% a.a.; CDBs de bancos médios oferecem ≈ 100% a 120% do CDI (${tag}).`,
+      `CDI acumulado 12 meses ≈ ${formatBRL(cdiAcumulado12m)}% a.a.; CDBs de bancos médios oferecem ≈ 100% a 120% do CDI (${tag}).`,
     )
+    await updateRateValue('cdb', cdiAcumulado12m)
     await updateMarketInfo(
       'lci-lca',
-      `Costumam pagar 85% a 95% do CDI (≈${formatBRL(cdiAnual)}% a.a.), mas isentas de IR — rendimento líquido pode superar CDB (${tag}).`,
+      `Costumam pagar 85% a 95% do CDI (≈${formatBRL(cdiAcumulado12m)}% a.a.), mas isentas de IR — rendimento líquido pode superar CDB (${tag}).`,
     )
     await updateMarketInfo(
       'debenture-incentivada',
@@ -60,7 +89,7 @@ marketDataRouter.post('/refresh', async (_req, res) => {
     )
     await updateMarketInfo(
       'debenture-comum',
-      `Costumam pagar CDI (≈${formatBRL(cdiAnual)}% a.a.) + 1,5% a 3% a.a., com IR regressivo sobre o rendimento (${tag}).`,
+      `Costumam pagar CDI (≈${formatBRL(cdiAcumulado12m)}% a.a.) + 1,5% a 3% a.a., com IR regressivo sobre o rendimento (${tag}).`,
     )
     updated.push('Renda fixa e Debêntures (Selic/CDI/IPCA via Banco Central)')
   } catch (err) {
