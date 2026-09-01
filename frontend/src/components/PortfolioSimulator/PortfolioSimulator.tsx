@@ -499,6 +499,8 @@ export function PortfolioSimulator({
         })
     })
 
+    const classPercents = Object.fromEntries(activeClasses.map((cls) => [cls, percents[cls]]))
+
     clearDraft()
     onConfirm({
       name: name.trim() || 'Minha Carteira',
@@ -510,6 +512,7 @@ export function PortfolioSimulator({
       risk,
       estimatedAnnualRate: portfolioAnnualRate.rate,
       estimatedAnnualRateCoverage: portfolioAnnualRate.coveragePercent,
+      classPercents,
       updatedAt: new Date().toISOString(),
     })
   }
@@ -941,6 +944,9 @@ export function PortfolioSimulator({
                                 </>
                               )}
                             </div>
+                          )}
+                          {!opt.nextPaymentDate && opt.payoutFrequency && (
+                            <div className="text-xs text-slate-500">{opt.payoutFrequency}</div>
                           )}
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">

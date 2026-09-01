@@ -19,6 +19,14 @@ CREATE TABLE IF NOT EXISTS carteira (
 ALTER TABLE carteira ADD COLUMN IF NOT EXISTS estimated_annual_rate numeric;
 ALTER TABLE carteira ADD COLUMN IF NOT EXISTS estimated_annual_rate_coverage numeric;
 
+-- % do aporte mensal que o usuário separou pra cada classe no assistente
+-- (ex.: {"Ações": 70, "FIIs": 20, "Renda fixa": 10}) — o teto que "Editar
+-- ativos" (adicionar um ativo numa carteira já salva, fora do assistente)
+-- precisa respeitar por classe, sem deixar a classe crescer além do que foi
+-- planejado. Carteiras salvas antes dessa coluna existir ficam com null; a
+-- tela trata isso como "sem teto conhecido" em vez de travar tudo em zero.
+ALTER TABLE carteira ADD COLUMN IF NOT EXISTS class_percents jsonb;
+
 -- carteira started as a singleton (always id=1, one portfolio for the whole
 -- app). Migrating it to hold multiple named portfolios: drop the singleton
 -- constraint, add a name, and give id a real auto-increment sequence instead

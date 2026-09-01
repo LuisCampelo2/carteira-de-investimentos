@@ -17,7 +17,7 @@ function formatReferenceMonth(iso: string): string {
 // Uma linha por ativo, com o que se sabe de real: preço (quando o ativo tem
 // preço unitário público — ações/ETFs/FIIs/cripto) e o rendimento real que
 // já é mostrado no simulador (dividendo/proventos ou taxa Selic/CDI/IPCA para
-// os itens de Renda fixa/Debêntures do catálogo). Nunca mostra número que não
+// os itens de Renda fixa do catálogo). Nunca mostra número que não
 // veio de refresh real — some para "—" quando não tem.
 function AtivoRow({ name, ticker, price, extra }: { name: string; ticker?: string; price?: number; extra?: React.ReactNode }) {
   return (

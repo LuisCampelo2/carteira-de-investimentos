@@ -8,7 +8,6 @@ import {
   formatBRL,
   formatBRLExact,
   formatPaymentDate,
-  simulatePortfolioGrowth,
   type AssetClass,
   type RiskTolerance,
 } from '../../utils/finance'
@@ -17,7 +16,6 @@ import { useInvestmentOptions } from '../../hooks/useInvestmentOptions'
 import { useCompanies } from '../../hooks/useCompanies'
 import { RefreshPricesButton } from '../ui/RefreshPricesButton'
 
-import { GrowthChart } from '../PortfolioSimulator/GrowthChart'
 import { PortfolioSimulator } from '../PortfolioSimulator/PortfolioSimulator'
 
 // Same mapping PortfolioSimulator uses to turn a company row into a generic
@@ -119,6 +117,7 @@ function CarteiraDetail({
       risk: carteira.risk,
       estimatedAnnualRate: rate,
       estimatedAnnualRateCoverage: coveragePercent,
+      classPercents: carteira.classPercents,
       updatedAt: new Date().toISOString(),
     })
   }
@@ -139,7 +138,22 @@ function CarteiraDetail({
     carteira.items.filter((i) => i.assetClass === addClass).map((i) => i.id.slice(i.id.indexOf(':') + 1)),
   )
 
+  // Teto da classe = % que você separou pra ela no assistente (persistido em
+  // classPercents) × aporte mensal — o mesmo valor que o assistente respeita
+  // ao montar a carteira, agora respeitado aqui também. Carteiras salvas
+  // antes de classPercents existir não têm esse dado: nesse caso não trava
+  // (null = sem teto conhecido) em vez de bloquear tudo em zero.
+  const classBudget =
+    carteira.classPercents?.[addClass] != null ? (carteira.monthlyContribution * carteira.classPercents[addClass]) / 100 : null
+  const classSpentNow = carteira.items
+    .filter((i) => i.assetClass === addClass)
+    .reduce((sum, i) => sum + i.monthlyAmount, 0)
+  const classRemaining = classBudget == null ? Infinity : Math.max(0, classBudget - classSpentNow)
+
+  const addCost = (opt: InvestmentOption): number => (opt.price != null ? opt.price * addQty : addAmount)
+
   const handleAddAtivo = async (opt: InvestmentOption) => {
+    if (addCost(opt) > classRemaining + 0.005) return
     setAddSaving(true)
     try {
       const newItem = buildItemFromOption(addClass, opt, addQty, addAmount)
@@ -186,22 +200,6 @@ function CarteiraDetail({
     () => carteira.estimatedAnnualRate ?? ANNUAL_RATE_BY_RISK[(carteira.risk as RiskTolerance) || 'media'] * 100,
     [carteira],
   )
-
-  // A projeção em si assume que você repete TODO mês a mesma compra (mesmos
-  // ativos, mesma quantidade salva na carteira) — um stream por item, cada
-  // um rendendo à sua própria taxa (real quando o item tem uma, senão a
-  // hipotética do risco). Qualquer sobra do aporte mensal que não corresponde
-  // a nenhum item salvo também vira um stream à taxa hipotética.
-  const points = useMemo(() => {
-    const fallbackRate = ANNUAL_RATE_BY_RISK[(carteira.risk as RiskTolerance) || 'media']
-    const streams = carteira.items.map((item) => ({
-      monthlyAmount: item.monthlyAmount,
-      annualRate: (item.estimatedAnnualRate ?? fallbackRate * 100) / 100,
-    }))
-    const leftover = carteira.monthlyContribution - totalMonthly
-    if (leftover > 0.005) streams.push({ monthlyAmount: leftover, annualRate: fallbackRate })
-    return simulatePortfolioGrowth(carteira.initialAmount, fallbackRate, carteira.years, streams)
-  }, [carteira, totalMonthly])
 
   return (
     <div className="space-y-4">
@@ -265,6 +263,17 @@ function CarteiraDetail({
             Renda fixa tem taxa/vencimento próprios — para adicionar, use "Refazer simulação". Aqui dá pra adicionar os
             outros tipos direto, sem passar pelo assistente de novo.
           </p>
+          {classBudget != null ? (
+            <p className={`text-xs font-medium ${classRemaining < 0.005 ? 'text-amber-300' : 'text-slate-400'}`}>
+              {classRemaining < 0.005
+                ? `Valor separado pra ${addClass} (${formatBRL(classBudget)}/mês) já está todo alocado.`
+                : `Restante em ${addClass}: ${formatBRLExact(classRemaining)}/mês (de ${formatBRL(classBudget)}/mês separados).`}
+            </p>
+          ) : (
+            <p className="text-xs text-slate-500">
+              Essa carteira não tem % por classe salvo (feita antes dessa opção existir) — sem teto pra respeitar aqui.
+            </p>
+          )}
           <div className="max-h-72 space-y-1.5 overflow-y-auto">
             {addOptions.length === 0 && <p className="text-xs text-slate-500">Nenhuma opção carregada para esta classe.</p>}
             {addOptions.map((opt) => {
@@ -281,6 +290,14 @@ function CarteiraDetail({
                       {already && <span className="ml-1.5 text-xs text-emerald-400">já na carteira</span>}
                     </div>
                     {opt.price != null && <div className="text-xs text-slate-500">{formatBRLExact(opt.price)}/un.</div>}
+                    {opt.dividendYieldValue != null && (
+                      <div className="text-xs text-emerald-400">
+                        {addClass === 'FIIs'
+                          ? `Rende ${opt.dividendYieldValue.toFixed(2).replace('.', ',')}%/mês`
+                          : `DY ${opt.dividendYieldValue.toFixed(2).replace('.', ',')}% (12 meses)`}
+                      </div>
+                    )}
+                    {opt.payoutFrequency && <div className="text-xs text-slate-500">{opt.payoutFrequency}</div>}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     {opt.price != null ? (
@@ -294,7 +311,8 @@ function CarteiraDetail({
                         <span className="w-5 text-center text-sm text-slate-200">{addQty}</span>
                         <button
                           onClick={() => setAddQty((q) => q + 1)}
-                          className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-slate-300 hover:border-slate-400"
+                          disabled={opt.price * (addQty + 1) > classRemaining + 0.005}
+                          className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-slate-300 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-30"
                         >
                           <Plus size={12} />
                         </button>
@@ -311,7 +329,7 @@ function CarteiraDetail({
                     )}
                     <button
                       onClick={() => handleAddAtivo(opt)}
-                      disabled={addSaving || (opt.price == null && addAmount <= 0)}
+                      disabled={addSaving || (opt.price == null && addAmount <= 0) || addCost(opt) > classRemaining + 0.005}
                       className="shrink-0 rounded-lg border border-sky-500 px-2.5 py-1 text-xs font-medium text-sky-300 hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Adicionar
@@ -433,13 +451,6 @@ function CarteiraDetail({
               {incomeSummary.withoutData > 0 &&
                 ` Não inclui ${incomeSummary.withoutData} ${incomeSummary.withoutData === 1 ? 'ativo sem' : 'ativos sem'} dado real disponível.`}
             </p>
-          </div>
-        )}
-
-        {points.length > 0 && (
-          <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-4">
-            <div className="mb-3 text-sm font-medium text-slate-300">Projeção de crescimento (simulação educacional)</div>
-            <GrowthChart points={points} />
           </div>
         )}
 

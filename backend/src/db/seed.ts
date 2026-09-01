@@ -2,7 +2,16 @@ import 'dotenv/config'
 import { pool } from './pool.js'
 import { investmentOptions, companies } from './seedData.js'
 
+// Classes removidas do produto (Previdência Privada, Debêntures) — limpa as
+// linhas antigas de quem já rodou o seed antes dessa mudança. Idempotente:
+// não faz nada se elas já não existirem.
+const REMOVED_INVESTMENT_OPTION_IDS = ['pgbl', 'vgbl', 'debenture-incentivada', 'debenture-comum']
+
 async function seed() {
+  if (REMOVED_INVESTMENT_OPTION_IDS.length > 0) {
+    await pool.query('DELETE FROM investment_options WHERE id = ANY($1)', [REMOVED_INVESTMENT_OPTION_IDS])
+  }
+
   for (const opt of investmentOptions) {
     await pool.query(
       `INSERT INTO investment_options (id, asset_class, name, ticker, description, market_info, payout_frequency, price_value)

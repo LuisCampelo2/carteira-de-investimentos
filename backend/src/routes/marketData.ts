@@ -83,15 +83,7 @@ marketDataRouter.post('/refresh', async (_req, res) => {
       'lci-lca',
       `Costumam pagar 85% a 95% do CDI (≈${formatBRL(cdiAcumulado12m)}% a.a.), mas isentas de IR — rendimento líquido pode superar CDB (${tag}).`,
     )
-    await updateMarketInfo(
-      'debenture-incentivada',
-      `Costumam pagar IPCA (${formatBRL(ipca12m)}% a.a. atual) + 6% a 8% a.a. isento de IR (${tag}).`,
-    )
-    await updateMarketInfo(
-      'debenture-comum',
-      `Costumam pagar CDI (≈${formatBRL(cdiAcumulado12m)}% a.a.) + 1,5% a 3% a.a., com IR regressivo sobre o rendimento (${tag}).`,
-    )
-    updated.push('Renda fixa e Debêntures (Selic/CDI/IPCA via Banco Central)')
+    updated.push('Renda fixa (Selic/CDI/IPCA via Banco Central)')
   } catch (err) {
     errors.push(`Selic/CDI/IPCA (Banco Central): ${(err as Error).message}`)
   }
@@ -192,15 +184,30 @@ marketDataRouter.post('/refresh', async (_req, res) => {
 
       const now = Date.now()
       const cashDividends = result?.dividendsData?.cashDividends ?? []
-      // Entre os proventos já anunciados, pega o de data mais próxima —
-      // futura se houver, senão o mais recente já pago.
+      // Entre os proventos já anunciados, acha a data mais próxima — futura
+      // se houver, senão a mais recente já paga.
       const future = cashDividends.filter((d) => new Date(d.paymentDate).getTime() >= now)
-      const nextPayment =
+      const targetDate =
         future.length > 0
-          ? future.reduce((a, b) => (new Date(a.paymentDate) < new Date(b.paymentDate) ? a : b))
+          ? future.reduce((a, b) => (new Date(a.paymentDate) < new Date(b.paymentDate) ? a : b)).paymentDate
           : cashDividends.length > 0
-            ? cashDividends.reduce((a, b) => (new Date(a.paymentDate) > new Date(b.paymentDate) ? a : b))
+            ? cashDividends.reduce((a, b) => (new Date(a.paymentDate) > new Date(b.paymentDate) ? a : b)).paymentDate
             : null
+
+      // Empresas costumam pagar dividendo + JCP na mesma data (ex.: Petrobras)
+      // — soma todas as tranches daquela data em vez de pegar só uma, senão o
+      // valor esperado fica subestimado.
+      const nextPayment =
+        targetDate != null
+          ? (() => {
+              const sameDate = cashDividends.filter((d) => d.paymentDate === targetDate)
+              return {
+                paymentDate: targetDate,
+                rate: sameDate.reduce((sum, d) => sum + d.rate, 0),
+                label: [...new Set(sameDate.map((d) => d.label))].join(' + '),
+              }
+            })()
+          : null
 
       return {
         dividendYield: result?.defaultKeyStatistics?.dividendYield ?? null,

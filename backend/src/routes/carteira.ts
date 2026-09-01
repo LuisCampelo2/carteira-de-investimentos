@@ -17,6 +17,7 @@ function rowToCarteira(row: any): CarteiraState {
     estimatedAnnualRate: row.estimated_annual_rate != null ? Number(row.estimated_annual_rate) : undefined,
     estimatedAnnualRateCoverage:
       row.estimated_annual_rate_coverage != null ? Number(row.estimated_annual_rate_coverage) : undefined,
+    classPercents: row.class_percents ?? undefined,
     updatedAt: row.updated_at,
   }
 }
@@ -40,9 +41,9 @@ carteiraRouter.post('/', async (req, res) => {
   const { rows } = await pool.query(
     `INSERT INTO carteira (
        name, items, monthly_contribution, initial_amount, years, objective, risk,
-       estimated_annual_rate, estimated_annual_rate_coverage, updated_at
+       estimated_annual_rate, estimated_annual_rate_coverage, class_percents, updated_at
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       body.name?.trim() || 'Minha Carteira',
@@ -54,6 +55,7 @@ carteiraRouter.post('/', async (req, res) => {
       body.risk ?? '',
       body.estimatedAnnualRate ?? null,
       body.estimatedAnnualRateCoverage ?? null,
+      body.classPercents ? JSON.stringify(body.classPercents) : null,
       body.updatedAt ?? new Date().toISOString(),
     ],
   )
@@ -66,8 +68,8 @@ carteiraRouter.put('/:id', async (req, res) => {
     `UPDATE carteira SET
        name = $1, items = $2, monthly_contribution = $3, initial_amount = $4, years = $5,
        objective = $6, risk = $7, estimated_annual_rate = $8, estimated_annual_rate_coverage = $9,
-       updated_at = $10
-     WHERE id = $11
+       class_percents = $10, updated_at = $11
+     WHERE id = $12
      RETURNING *`,
     [
       body.name?.trim() || 'Minha Carteira',
@@ -79,6 +81,7 @@ carteiraRouter.put('/:id', async (req, res) => {
       body.risk ?? '',
       body.estimatedAnnualRate ?? null,
       body.estimatedAnnualRateCoverage ?? null,
+      body.classPercents ? JSON.stringify(body.classPercents) : null,
       body.updatedAt ?? new Date().toISOString(),
       req.params.id,
     ],

@@ -6,20 +6,9 @@ export type AssetClass =
   | 'Ações'
   | 'FIIs'
   | 'Fundos Multimercado'
-  | 'Previdência Privada'
-  | 'Debêntures'
   | 'Criptomoedas'
 
-export const ASSET_CLASSES: AssetClass[] = [
-  'Renda fixa',
-  'ETFs',
-  'Ações',
-  'FIIs',
-  'Fundos Multimercado',
-  'Previdência Privada',
-  'Debêntures',
-  'Criptomoedas',
-]
+export const ASSET_CLASSES: AssetClass[] = ['Renda fixa', 'ETFs', 'Ações', 'FIIs', 'Fundos Multimercado', 'Criptomoedas']
 
 export const ASSET_CLASS_COLORS: Record<AssetClass, string> = {
   'Renda fixa': 'var(--color-brand-4)',
@@ -27,8 +16,6 @@ export const ASSET_CLASS_COLORS: Record<AssetClass, string> = {
   Ações: 'var(--color-brand-1)',
   FIIs: 'var(--color-brand-5)',
   'Fundos Multimercado': 'var(--color-brand-3)',
-  'Previdência Privada': 'var(--color-brand-8)',
-  Debêntures: 'var(--color-brand-10)',
   Criptomoedas: 'var(--color-brand-6)',
 }
 

@@ -161,34 +161,6 @@ export const investmentOptions: SeedInvestmentOption[] = [
     payoutFrequency: 'Geralmente não distribui — ganho vem da valorização da cota (fundo de acumulação).',
   },
 
-  // Previdência Privada
-  {
-    id: 'pgbl', assetClass: 'Previdência Privada', name: 'PGBL',
-    description: 'Plano de previdência indicado para quem declara Imposto de Renda completo, permite deduzir até 12% da renda tributável.',
-    marketInfo: 'Rentabilidade depende do fundo escolhido dentro do plano — varia como um fundo comum.',
-    payoutFrequency: 'Não distribui na fase de acumulação — só é recebido no resgate ou na aposentadoria.',
-  },
-  {
-    id: 'vgbl', assetClass: 'Previdência Privada', name: 'VGBL',
-    description: 'Plano de previdência indicado para quem declara IR simplificado ou é isento, sem benefício de dedução.',
-    marketInfo: 'Rentabilidade depende do fundo escolhido dentro do plano — varia como um fundo comum.',
-    payoutFrequency: 'Não distribui na fase de acumulação — só é recebido no resgate ou na aposentadoria.',
-  },
-
-  // Debêntures
-  {
-    id: 'debenture-incentivada', assetClass: 'Debêntures', name: 'Debênture Incentivada',
-    description: 'Título de dívida privada isento de Imposto de Renda para pessoa física, usado para financiar projetos de infraestrutura.',
-    marketInfo: 'Costumam pagar IPCA + 6% a 8% a.a. isento de IR (ago/2026).',
-    payoutFrequency: 'Varia por emissão — comumente semestral, podendo ser mensal, trimestral ou só no vencimento.',
-  },
-  {
-    id: 'debenture-comum', assetClass: 'Debêntures', name: 'Debênture Comum',
-    description: 'Título de dívida emitido por empresas para captar recursos, com tributação regressiva de Imposto de Renda.',
-    marketInfo: 'Costumam pagar CDI + 1,5% a 3% a.a., com IR regressivo sobre o rendimento.',
-    payoutFrequency: 'Varia por emissão — comumente semestral, podendo ser mensal, trimestral ou só no vencimento.',
-  },
-
   // Criptomoedas
   {
     id: 'bitcoin', assetClass: 'Criptomoedas', name: 'Bitcoin', ticker: 'BTC',
