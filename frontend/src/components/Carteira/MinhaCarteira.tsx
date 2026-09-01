@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ChevronLeft, Coins, Download, PiggyBank, Plus, Trash2, X } from 'lucide-react'
-import type { CarteiraState } from '../../data/types'
+import { AlertTriangle, ChevronLeft, Coins, Download, Minus, PiggyBank, Plus, Settings2, Trash2, X } from 'lucide-react'
+import type { CarteiraItem, CarteiraState, InvestmentOption } from '../../data/types'
 import {
   ASSET_CLASSES,
   ASSET_CLASS_COLORS,
@@ -9,11 +9,38 @@ import {
   formatBRLExact,
   formatPaymentDate,
   simulatePortfolioGrowth,
+  type AssetClass,
   type RiskTolerance,
 } from '../../utils/finance'
+import { buildItemFromOption, annualYieldPercentFor, weightedRateAndCoverage, FALLBACK_RATE_PERCENT } from '../../utils/carteiraItemCompute'
+import { useInvestmentOptions } from '../../hooks/useInvestmentOptions'
+import { useCompanies } from '../../hooks/useCompanies'
+import { RefreshPricesButton } from '../ui/RefreshPricesButton'
 
 import { GrowthChart } from '../PortfolioSimulator/GrowthChart'
 import { PortfolioSimulator } from '../PortfolioSimulator/PortfolioSimulator'
+
+// Same mapping PortfolioSimulator uses to turn a company row into a generic
+// InvestmentOption — duplicated here (not imported) because it's defined
+// inline inside that component, not exported.
+function companyToOption(c: ReturnType<typeof useCompanies>['companies'][number]): InvestmentOption {
+  return {
+    id: c.id,
+    assetClass: 'Ações',
+    name: c.name,
+    ticker: c.ticker,
+    description: c.whatItDoes,
+    marketInfo: c.priceApprox,
+    payoutFrequency: c.payoutFrequency,
+    price: c.priceValue,
+    dividendYieldValue: c.dividendYieldValue,
+    dividendReferenceMonth: c.dividendReferenceMonth,
+    nextPaymentDate: c.nextPaymentDate,
+    nextPaymentAmount: c.nextPaymentAmount,
+    nextPaymentLabel: c.nextPaymentLabel,
+    realPaymentFrequency: c.realPaymentFrequency,
+  }
+}
 
 function CarteiraDetail({
   carteira,
@@ -21,13 +48,109 @@ function CarteiraDetail({
   onEdit,
   onDelete,
   onRemoveItem,
+  onUpdateCarteira,
 }: {
   carteira: CarteiraState
   onBack: () => void
   onEdit: () => void
   onDelete: () => void
   onRemoveItem: (itemId: string) => void
+  onUpdateCarteira: (id: number, next: Omit<CarteiraState, 'id'>) => Promise<CarteiraState>
 }) {
+  const { byClass: baseOptionsByClass, refetch: refetchOptions } = useInvestmentOptions()
+  const { companies, refetch: refetchCompanies } = useCompanies()
+  const [addAtivosOpen, setAddAtivosOpen] = useState(false)
+  const [addClass, setAddClass] = useState<AssetClass>('Ações')
+  const [addQty, setAddQty] = useState(1)
+  const [addAmount, setAddAmount] = useState(0)
+  const [addSaving, setAddSaving] = useState(false)
+
+  const optionsForClass = (cls: AssetClass): InvestmentOption[] =>
+    cls === 'Ações' ? companies.map(companyToOption) : baseOptionsByClass[cls] ?? []
+
+  // Re-derives an item's up-to-date rate/real-ness against a given options
+  // snapshot (either freshly refetched, for "Atualizar", or whatever's
+  // currently loaded, for adding an asset) — the item alone can't tell real
+  // from hypothetical once persisted (see estimatedAnnualRate on the type),
+  // so this is the one place both flows re-check it against live data.
+  const rateEntryFor = (
+    item: CarteiraItem,
+    byClass: Record<AssetClass, InvestmentOption[]>,
+    companiesList: typeof companies,
+  ): { entry: { monthlyAmount: number; annualRatePercent: number; real: boolean }; updated: CarteiraItem } => {
+    const fallback = {
+      entry: { monthlyAmount: item.monthlyAmount, annualRatePercent: item.estimatedAnnualRate ?? FALLBACK_RATE_PERCENT, real: false },
+      updated: item,
+    }
+    if (item.assetClass === 'Renda fixa' || item.id.startsWith('rf-')) return fallback
+
+    const optId = item.id.slice(item.id.indexOf(':') + 1)
+    const cls = item.assetClass as AssetClass
+    let opt: InvestmentOption | undefined
+    if (cls === 'Ações') {
+      const company = companiesList.find((c) => c.id === optId)
+      opt = company ? companyToOption(company) : undefined
+    } else {
+      opt = byClass[cls]?.find((o) => o.id === optId)
+    }
+    if (!opt || opt.price == null || item.quantity == null) return fallback
+
+    const updated = buildItemFromOption(cls, opt, item.quantity)
+    return {
+      entry: {
+        monthlyAmount: updated.monthlyAmount,
+        annualRatePercent: updated.estimatedAnnualRate ?? FALLBACK_RATE_PERCENT,
+        real: annualYieldPercentFor(cls, opt) != null,
+      },
+      updated,
+    }
+  }
+
+  const saveWithRecomputedRate = (items: CarteiraItem[], byClass: Record<AssetClass, InvestmentOption[]>, companiesList: typeof companies) => {
+    const rateEntries = items.map((i) => rateEntryFor(i, byClass, companiesList).entry)
+    const { rate, coveragePercent } = weightedRateAndCoverage(rateEntries, carteira.monthlyContribution)
+    return onUpdateCarteira(carteira.id, {
+      name: carteira.name,
+      items,
+      monthlyContribution: carteira.monthlyContribution,
+      initialAmount: carteira.initialAmount,
+      years: carteira.years,
+      objective: carteira.objective,
+      risk: carteira.risk,
+      estimatedAnnualRate: rate,
+      estimatedAnnualRateCoverage: coveragePercent,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  // "Atualizar": re-pulls fresh prices/dividendos/taxas e recalcula só os
+  // valores de cada ativo já escolhido (preço × quantidade salva, rendimento
+  // esperado, taxa) — nunca muda quais ativos estão na carteira. Itens sem
+  // preço público (Renda fixa, customizados) ficam como estão: não há como
+  // recalcular sem inventar um número.
+  const handleAtualizado = async () => {
+    const [freshByClass, freshCompanies] = await Promise.all([refetchOptions(), refetchCompanies()])
+    const newItems = carteira.items.map((item) => rateEntryFor(item, freshByClass, freshCompanies).updated)
+    await saveWithRecomputedRate(newItems, freshByClass, freshCompanies)
+  }
+
+  const addOptions = optionsForClass(addClass)
+  const alreadyAddedIds = new Set(
+    carteira.items.filter((i) => i.assetClass === addClass).map((i) => i.id.slice(i.id.indexOf(':') + 1)),
+  )
+
+  const handleAddAtivo = async (opt: InvestmentOption) => {
+    setAddSaving(true)
+    try {
+      const newItem = buildItemFromOption(addClass, opt, addQty, addAmount)
+      await saveWithRecomputedRate([...carteira.items, newItem], baseOptionsByClass, companies)
+      setAddQty(1)
+      setAddAmount(0)
+    } finally {
+      setAddSaving(false)
+    }
+  }
+
   const totalMonthly = useMemo(() => carteira.items.reduce((sum, i) => sum + i.monthlyAmount, 0), [carteira])
 
   const percentByClass = useMemo(() => {
@@ -88,6 +211,14 @@ function CarteiraDetail({
         </button>
         <div className="flex items-center gap-1">
           <button
+            onClick={() => setAddAtivosOpen((v) => !v)}
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${
+              addAtivosOpen ? 'bg-slate-800 text-slate-100' : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <Settings2 size={13} /> Editar ativos
+          </button>
+          <button
             onClick={() => window.print()}
             className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
             aria-label="Baixar carteira em PDF"
@@ -105,6 +236,93 @@ function CarteiraDetail({
           </button>
         </div>
       </div>
+
+      <div className="no-print">
+        <RefreshPricesButton onRefreshed={handleAtualizado} />
+      </div>
+
+      {addAtivosOpen && (
+        <div className="no-print space-y-3 rounded-xl border border-sky-500/30 bg-sky-500/5 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-medium text-slate-200">Adicionar ativo</div>
+            <select
+              value={addClass}
+              onChange={(e) => {
+                setAddClass(e.target.value as AssetClass)
+                setAddQty(1)
+                setAddAmount(0)
+              }}
+              className="rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-sky-500"
+            >
+              {ASSET_CLASSES.filter((c) => c !== 'Renda fixa').map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-xs text-slate-500">
+            Renda fixa tem taxa/vencimento próprios — para adicionar, use "Refazer simulação". Aqui dá pra adicionar os
+            outros tipos direto, sem passar pelo assistente de novo.
+          </p>
+          <div className="max-h-72 space-y-1.5 overflow-y-auto">
+            {addOptions.length === 0 && <p className="text-xs text-slate-500">Nenhuma opção carregada para esta classe.</p>}
+            {addOptions.map((opt) => {
+              const already = alreadyAddedIds.has(opt.id)
+              return (
+                <div
+                  key={opt.id}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-slate-200">
+                      {opt.name}
+                      {opt.ticker && opt.ticker !== opt.name && <span className="ml-1 text-xs text-slate-500">{opt.ticker}</span>}
+                      {already && <span className="ml-1.5 text-xs text-emerald-400">já na carteira</span>}
+                    </div>
+                    {opt.price != null && <div className="text-xs text-slate-500">{formatBRLExact(opt.price)}/un.</div>}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {opt.price != null ? (
+                      <>
+                        <button
+                          onClick={() => setAddQty((q) => Math.max(1, q - 1))}
+                          className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-slate-300 hover:border-slate-400"
+                        >
+                          <Minus size={12} />
+                        </button>
+                        <span className="w-5 text-center text-sm text-slate-200">{addQty}</span>
+                        <button
+                          onClick={() => setAddQty((q) => q + 1)}
+                          className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-slate-300 hover:border-slate-400"
+                        >
+                          <Plus size={12} />
+                        </button>
+                      </>
+                    ) : (
+                      <input
+                        type="number"
+                        min={0}
+                        value={addAmount === 0 ? '' : addAmount}
+                        onChange={(e) => setAddAmount(e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
+                        placeholder="R$/mês"
+                        className="w-20 appearance-none rounded-lg border border-slate-700 bg-slate-900/60 px-2 py-1 text-right text-sm text-slate-200 outline-none placeholder:text-slate-600 [-moz-appearance:textfield] focus:border-sky-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      />
+                    )}
+                    <button
+                      onClick={() => handleAddAtivo(opt)}
+                      disabled={addSaving || (opt.price == null && addAmount <= 0)}
+                      className="shrink-0 rounded-lg border border-sky-500 px-2.5 py-1 text-xs font-medium text-sky-300 hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="print-area space-y-5">
         <h3 className="text-base font-semibold text-slate-100 print:text-slate-900">
@@ -332,6 +550,7 @@ export function MinhaCarteira({
               onSelectCarteira(null)
             }}
             onRemoveItem={(itemId) => onRemoveItem(selected.id, itemId)}
+            onUpdateCarteira={onUpdateCarteira}
           />
         ) : carteiras.length === 0 ? (
           <div className="space-y-4">

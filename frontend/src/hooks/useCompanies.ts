@@ -6,8 +6,19 @@ export function useCompanies() {
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Returns the fresh array directly — see the identical comment in
+  // useInvestmentOptions.refetch for why (avoids a stale-closure read).
   const refetch = useCallback(() => {
-    return api.get<Company[]>('/api/companies').then(setCompanies).catch(console.error)
+    return api
+      .get<Company[]>('/api/companies')
+      .then((next) => {
+        setCompanies(next)
+        return next
+      })
+      .catch((err) => {
+        console.error(err)
+        return [] as Company[]
+      })
   }, [])
 
   useEffect(() => {

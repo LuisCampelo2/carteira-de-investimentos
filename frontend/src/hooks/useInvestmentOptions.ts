@@ -14,6 +14,10 @@ export function useInvestmentOptions() {
   const [byClass, setByClass] = useState<Record<AssetClass, InvestmentOption[]>>(() => emptyByClass())
   const [loading, setLoading] = useState(true)
 
+  // Returns the fresh grouped data directly (not just void) so a caller that
+  // needs to compute something with the just-refreshed values right away
+  // (e.g. "Atualizar" recomputing a saved carteira) doesn't hit a stale
+  // closure by reading `byClass` from state immediately after awaiting this.
   const refetch = useCallback(() => {
     return api
       .get<InvestmentOption[]>('/api/investment-options')
@@ -23,8 +27,12 @@ export function useInvestmentOptions() {
           if (grouped[opt.assetClass as AssetClass]) grouped[opt.assetClass as AssetClass].push(opt)
         }
         setByClass(grouped)
+        return grouped
       })
-      .catch(console.error)
+      .catch((err) => {
+        console.error(err)
+        return emptyByClass()
+      })
   }, [])
 
   useEffect(() => {

@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+
+# Roda isso aqui do seu Windows: ele só abre a conexão SSH com o VPS e manda
+# rodar o deploy.sh de lá (baixado direto do GitHub) — nada de apt/pm2/nginx
+# acontece na sua máquina, só no VPS. O -t garante um terminal interativo pra
+# funcionar o prompt de senha do SSH e o prompt de senha do Postgres dentro
+# do deploy.sh.
+
+VPS_USER="root"
+VPS_HOST="2.24.108.221"
+
+ssh -t "${VPS_USER}@${VPS_HOST}" '
+  set -euo pipefail
+  curl -fsSL https://raw.githubusercontent.com/LuisCampelo2/carteira-de-investimentos/main/deploy/deploy.sh -o deploy.sh
+  chmod +x deploy.sh
+  ./deploy.sh
+'
