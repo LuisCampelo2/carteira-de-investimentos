@@ -12,7 +12,7 @@ import {
   type AssetClass,
   type RiskTolerance,
 } from '../../utils/finance'
-import { buildItemFromOption, annualYieldPercentFor, weightedRateAndCoverage, FALLBACK_RATE_PERCENT } from '../../utils/carteiraItemCompute'
+import { buildItemFromOption, annualYieldPercentFor, describePayout, weightedRateAndCoverage, FALLBACK_RATE_PERCENT } from '../../utils/carteiraItemCompute'
 import { useInvestmentOptions } from '../../hooks/useInvestmentOptions'
 import { useCompanies } from '../../hooks/useCompanies'
 import { RefreshPricesButton } from '../ui/RefreshPricesButton'
@@ -294,6 +294,7 @@ function CarteiraDetail({
             {addOptions.length === 0 && <p className="text-xs text-slate-500">Nenhuma opção carregada para esta classe.</p>}
             {addOptions.map((opt) => {
               const already = alreadyAddedIds.has(opt.id)
+              const payout = describePayout(addClass, opt, addQty)
               return (
                 <div
                   key={opt.id}
@@ -305,15 +306,9 @@ function CarteiraDetail({
                       {opt.ticker && opt.ticker !== opt.name && <span className="ml-1 text-xs text-slate-500">{opt.ticker}</span>}
                       {already && <span className="ml-1.5 text-xs text-emerald-400">já na carteira</span>}
                     </div>
-                    {opt.price != null && <div className="text-xs text-slate-500">{formatBRLExact(opt.price)}/un.</div>}
-                    {opt.dividendYieldValue != null && (
-                      <div className="text-xs text-emerald-400">
-                        {addClass === 'FIIs'
-                          ? `Rende ${opt.dividendYieldValue.toFixed(2).replace('.', ',')}%/mês`
-                          : `DY ${opt.dividendYieldValue.toFixed(2).replace('.', ',')}% (12 meses)`}
-                      </div>
-                    )}
-                    {opt.payoutFrequency && <div className="text-xs text-slate-500">{opt.payoutFrequency}</div>}
+                    {opt.price != null && <div className="text-xs text-slate-500">Compra: {formatBRLExact(opt.price)}/un.</div>}
+                    {payout.returnLabel && <div className="text-xs text-emerald-400">Retorno: {payout.returnLabel}</div>}
+                    {payout.frequencyLabel && <div className="text-xs text-slate-500">{payout.frequencyLabel}</div>}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     {opt.price != null ? (

@@ -12,6 +12,7 @@ import {
   type GrowthStream,
 } from '../../utils/finance'
 import type { CarteiraItem, CarteiraState, InvestmentOption } from '../../data/types'
+import { describePayout } from '../../utils/carteiraItemCompute'
 import { useInvestmentOptions } from '../../hooks/useInvestmentOptions'
 import { useCompanies } from '../../hooks/useCompanies'
 import { RefreshPricesButton } from '../ui/RefreshPricesButton'
@@ -883,6 +884,7 @@ export function PortfolioSimulator({
                     const isCustom = opt.id.startsWith('custom-')
                     const unit = unitPrice(cls, opt)
                     const canIncrement = remaining >= unit - 0.005
+                    const payout = describePayout(cls, opt, qty)
                     return (
                       <div
                         key={opt.id}
@@ -895,60 +897,9 @@ export function PortfolioSimulator({
                             {opt.name}
                             {opt.ticker && opt.ticker !== opt.name && <span className="ml-1 text-xs text-slate-500">{opt.ticker}</span>}
                           </div>
-                          <div className="text-lg font-bold text-emerald-400">{formatBRLExact(unit)}</div>
-                          {opt.dividendYieldValue != null && opt.nextPaymentDate && (
-                            <div className="text-xs text-slate-400">
-                              <span>
-                                Paga ≈ {opt.dividendYieldValue.toFixed(1).replace('.', ',')}% a.a.
-                                {opt.realPaymentFrequency ? ` (${opt.realPaymentFrequency})` : ''}
-                              </span>
-                              {opt.nextPaymentAmount != null && (
-                                <span className={qty > 0 ? 'block font-medium text-emerald-300' : 'block'}>
-                                  {qty > 0
-                                    ? `Você recebe ${formatBRLExact(opt.nextPaymentAmount * qty)}`
-                                    : `Próximo: ${formatBRLExact(opt.nextPaymentAmount)}/un.`}
-                                  {' em '}
-                                  {formatPaymentDate(opt.nextPaymentDate)}
-                                  {opt.nextPaymentLabel ? ` (${opt.nextPaymentLabel})` : ''}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                          {opt.dividendYieldValue != null && !opt.nextPaymentDate && opt.dividendReferenceMonth && cls === 'FIIs' && (
-                            <div className="text-xs text-slate-400">
-                              <span>
-                                Rendeu {opt.dividendYieldValue.toFixed(2).replace('.', ',')}% em{' '}
-                                {formatReferenceMonth(opt.dividendReferenceMonth)} · Mensal
-                              </span>
-                              <span className={qty > 0 ? 'block font-medium text-emerald-300' : 'block'}>
-                                {qty > 0
-                                  ? `Você recebe ≈ ${formatBRLExact(unit * (opt.dividendYieldValue / 100) * qty)}/mês`
-                                  : `≈ ${formatBRLExact(unit * (opt.dividendYieldValue / 100))}/un. por mês`}
-                              </span>
-                            </div>
-                          )}
-                          {opt.dividendYieldValue != null && !opt.nextPaymentDate && opt.dividendReferenceMonth && cls === 'Ações' && (
-                            <div className="text-xs text-slate-400">
-                              {opt.dividendYieldValue === 0 ? (
-                                <span>Sem dividendos nos últimos 12 meses (dado de {formatReferenceMonth(opt.dividendReferenceMonth)})</span>
-                              ) : (
-                                <>
-                                  <span>
-                                    DY {opt.dividendYieldValue.toFixed(2).replace('.', ',')}% nos últimos 12 meses (dado de{' '}
-                                    {formatReferenceMonth(opt.dividendReferenceMonth)})
-                                  </span>
-                                  <span className={qty > 0 ? 'block font-medium text-emerald-300' : 'block'}>
-                                    {qty > 0
-                                      ? `≈ ${formatBRLExact(unit * (opt.dividendYieldValue / 100) * qty)}/ano estimado`
-                                      : `≈ ${formatBRLExact(unit * (opt.dividendYieldValue / 100))}/un. por ano`}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          )}
-                          {!opt.nextPaymentDate && opt.payoutFrequency && (
-                            <div className="text-xs text-slate-500">{opt.payoutFrequency}</div>
-                          )}
+                          <div className="text-lg font-bold text-emerald-400">Compra: {formatBRLExact(unit)}</div>
+                          {payout.returnLabel && <div className="text-xs text-emerald-400">Retorno: {payout.returnLabel}</div>}
+                          {payout.frequencyLabel && <div className="text-xs text-slate-500">{payout.frequencyLabel}</div>}
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                           <button

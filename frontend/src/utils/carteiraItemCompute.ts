@@ -1,4 +1,4 @@
-import { ANNUAL_RATE_BY_RISK, formatPaymentDate, type AssetClass } from './finance'
+import { ANNUAL_RATE_BY_RISK, formatBRLExact, formatPaymentDate, type AssetClass } from './finance'
 import type { CarteiraItem, InvestmentOption } from '../data/types'
 
 const MONTHS_PT = [
@@ -35,6 +35,49 @@ export function annualYieldPercentFor(cls: AssetClass, opt: InvestmentOption): n
 /** Real unit price when known (stocks/ETFs/FIIs), otherwise null — caller decides the fallback. */
 export function unitPriceFor(opt: InvestmentOption): number | null {
   return opt.price ?? null
+}
+
+export interface PayoutDisplay {
+  /** e.g. "≈ R$12,34/mês" or "R$45,67 em 21/12" — null when there's no real
+   * data to compute a return from (never a guessed number). */
+  returnLabel: string | null
+  /** e.g. "Mensal" or "Trimestral (JCP antecipado por trimestre)..." — the
+   * real inferred frequency when a payment calendar exists, else the
+   * catalog's generic frequency text, else null. */
+  frequencyLabel: string | null
+}
+
+/** The exact 3 things a card should show about an asset's payout: purchase
+ * price (handled separately by the caller via opt.price), estimated return,
+ * and how often — condensed from whichever real data source is available
+ * (brapi.dev calendar > FII monthly CVM yield > stock trailing DY), never
+ * inventing a number for classes without one. */
+export function describePayout(cls: AssetClass, opt: InvestmentOption, qty: number): PayoutDisplay {
+  const unit = opt.price ?? 0
+  const frequencyLabel = opt.realPaymentFrequency ?? opt.payoutFrequency ?? null
+  const forUnit = qty > 0 ? '' : '/un.'
+  const effectiveQty = qty > 0 ? qty : 1
+
+  if (opt.nextPaymentAmount != null && opt.nextPaymentDate) {
+    return {
+      returnLabel: `${formatBRLExact(opt.nextPaymentAmount * effectiveQty)}${forUnit} em ${formatPaymentDate(opt.nextPaymentDate)}`,
+      frequencyLabel,
+    }
+  }
+  if (cls === 'FIIs' && opt.dividendYieldValue != null && opt.dividendReferenceMonth) {
+    return {
+      returnLabel: `≈ ${formatBRLExact(unit * (opt.dividendYieldValue / 100) * effectiveQty)}${forUnit}/mês`,
+      frequencyLabel,
+    }
+  }
+  if (cls === 'Ações' && opt.dividendYieldValue != null) {
+    if (opt.dividendYieldValue === 0) return { returnLabel: 'Sem dividendos nos últimos 12 meses', frequencyLabel }
+    return {
+      returnLabel: `≈ ${formatBRLExact(unit * (opt.dividendYieldValue / 100) * effectiveQty)}${forUnit}/ano`,
+      frequencyLabel,
+    }
+  }
+  return { returnLabel: null, frequencyLabel }
 }
 
 export const FALLBACK_RATE_PERCENT = ANNUAL_RATE_BY_RISK.media * 100
