@@ -62,6 +62,7 @@ export function buildItemFromOption(cls: AssetClass, opt: InvestmentOption, qty:
     expectedIncome: income ?? undefined,
     expectedIncomeNote: note,
     estimatedAnnualRate: annualYieldPercentFor(cls, opt) ?? FALLBACK_RATE_PERCENT,
+    payoutFrequency: opt.payoutFrequency,
   }
 }
 

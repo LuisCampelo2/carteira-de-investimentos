@@ -15,6 +15,7 @@ export interface CarteiraItem {
    * purchase in the growth projection — the item's real dividend/FII yield
    * when we have one, otherwise the hypothetical risk-based rate. */
   estimatedAnnualRate?: number
+  payoutFrequency?: string
 }
 
 export interface CarteiraState {

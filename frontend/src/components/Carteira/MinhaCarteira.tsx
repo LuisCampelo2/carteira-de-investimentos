@@ -420,6 +420,7 @@ function CarteiraDetail({
                       {item.rendaFixaTipo && item.estimatedAnnualRate != null && (
                         <div className="mt-0.5 text-xs text-slate-500">≈{item.estimatedAnnualRate.toFixed(1).replace('.', ',')}% a.a. usado na projeção</div>
                       )}
+                      {item.payoutFrequency && <div className="mt-0.5 text-xs text-slate-500">{item.payoutFrequency}</div>}
                       {item.rendaFixaVencimento && (
                         <div className="mt-0.5 text-xs text-slate-500">Vencimento: {formatPaymentDate(item.rendaFixaVencimento)}</div>
                       )}

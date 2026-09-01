@@ -495,6 +495,7 @@ export function PortfolioSimulator({
             expectedIncome: income ?? undefined,
             expectedIncomeNote: note,
             estimatedAnnualRate: annualYieldPercent(cls, opt) ?? ANNUAL_RATE_BY_RISK[risk] * 100,
+            payoutFrequency: opt.payoutFrequency,
           }
         })
     })

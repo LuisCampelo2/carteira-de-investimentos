@@ -70,6 +70,10 @@ export interface CarteiraItem {
    * purchase in the growth projection — the item's real dividend/FII yield
    * when we have one, otherwise the hypothetical risk-based rate. */
   estimatedAnnualRate?: number
+  /** Snapshot of the asset's payout frequency (e.g. "Mensal", "Trimestral —
+   * JCP antecipado...") at the time it was added, so the saved carteira can
+   * show it without a live lookup. */
+  payoutFrequency?: string
 }
 
 export interface CarteiraState {

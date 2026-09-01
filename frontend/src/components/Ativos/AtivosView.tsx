@@ -41,39 +41,48 @@ function AtivoRow({ name, ticker, price, extra }: { name: string; ticker?: strin
 }
 
 function CompanyExtra({ c }: { c: Company }) {
-  if (c.dividendYieldValue == null) return null
-  if (c.nextPaymentDate && c.nextPaymentAmount != null) {
-    return (
-      <div className="text-xs text-slate-500">
-        DY ≈{c.dividendYieldValue.toFixed(1).replace('.', ',')}% a.a. · próximo {formatBRLExact(c.nextPaymentAmount)}/un. em{' '}
-        {c.nextPaymentDate.split('-').reverse().join('/')}
-        {c.realPaymentFrequency ? ` (${c.realPaymentFrequency})` : ''}
-      </div>
-    )
-  }
+  const hasNextPayment = c.nextPaymentDate && c.nextPaymentAmount != null
   return (
-    <div className="text-xs text-slate-500">
-      {c.dividendYieldValue === 0
-        ? `Sem dividendos nos últimos 12 meses${c.dividendReferenceMonth ? ` (dado de ${formatReferenceMonth(c.dividendReferenceMonth)})` : ''}`
-        : `DY ≈${c.dividendYieldValue.toFixed(1).replace('.', ',')}% nos últimos 12 meses${c.dividendReferenceMonth ? ` (dado de ${formatReferenceMonth(c.dividendReferenceMonth)})` : ''}`}
-    </div>
+    <>
+      {hasNextPayment ? (
+        <div className="text-xs text-slate-500">
+          DY ≈{c.dividendYieldValue!.toFixed(1).replace('.', ',')}% a.a. · próximo {formatBRLExact(c.nextPaymentAmount!)}/un. em{' '}
+          {c.nextPaymentDate!.split('-').reverse().join('/')}
+          {c.realPaymentFrequency ? ` (${c.realPaymentFrequency})` : ''}
+        </div>
+      ) : c.dividendYieldValue != null ? (
+        <div className="text-xs text-slate-500">
+          {c.dividendYieldValue === 0
+            ? `Sem dividendos nos últimos 12 meses${c.dividendReferenceMonth ? ` (dado de ${formatReferenceMonth(c.dividendReferenceMonth)})` : ''}`
+            : `DY ≈${c.dividendYieldValue.toFixed(1).replace('.', ',')}% nos últimos 12 meses${c.dividendReferenceMonth ? ` (dado de ${formatReferenceMonth(c.dividendReferenceMonth)})` : ''}`}
+        </div>
+      ) : null}
+      {/* A frequência já aparece dentro da linha acima quando há calendário real
+          (realPaymentFrequency) — só mostra o texto genérico do payoutFrequency
+          nos outros casos, senão fica repetido. */}
+      {!hasNextPayment && c.payoutFrequency && <div className="text-xs text-slate-500">{c.payoutFrequency}</div>}
+    </>
   )
 }
 
 function OptionExtra({ opt }: { opt: InvestmentOption }) {
-  if (opt.dividendYieldValue != null) {
-    return (
-      <div className="text-xs text-slate-500">
-        Rendeu {opt.dividendYieldValue.toFixed(2).replace('.', ',')}%
-        {opt.dividendReferenceMonth ? ` em ${formatReferenceMonth(opt.dividendReferenceMonth)}` : ''} · Mensal
-      </div>
-    )
-  }
-  if (opt.rateValue != null) {
-    return <div className="text-xs text-slate-500">Taxa real ≈{opt.rateValue.toFixed(2).replace('.', ',')}% a.a. (Banco Central)</div>
-  }
-  if (opt.marketInfo) return <div className="truncate text-xs text-slate-500">{opt.marketInfo}</div>
-  return null
+  return (
+    <>
+      {opt.dividendYieldValue != null ? (
+        <div className="text-xs text-slate-500">
+          Rendeu {opt.dividendYieldValue.toFixed(2).replace('.', ',')}%
+          {opt.dividendReferenceMonth ? ` em ${formatReferenceMonth(opt.dividendReferenceMonth)}` : ''} · Mensal
+        </div>
+      ) : opt.rateValue != null ? (
+        <div className="text-xs text-slate-500">Taxa real ≈{opt.rateValue.toFixed(2).replace('.', ',')}% a.a. (Banco Central)</div>
+      ) : opt.marketInfo ? (
+        <div className="truncate text-xs text-slate-500">{opt.marketInfo}</div>
+      ) : null}
+      {/* Mensal já fica claro na linha de DY acima — só acrescenta o
+          payoutFrequency quando ele traz frequência que ainda não apareceu. */}
+      {opt.dividendYieldValue == null && opt.payoutFrequency && <div className="text-xs text-slate-500">{opt.payoutFrequency}</div>}
+    </>
+  )
 }
 
 export function AtivosView({ onClose }: { onClose: () => void }) {
