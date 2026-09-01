@@ -12,34 +12,19 @@ import {
   type AssetClass,
   type RiskTolerance,
 } from '../../utils/finance'
-import { buildItemFromOption, annualYieldPercentFor, describePayout, weightedRateAndCoverage, FALLBACK_RATE_PERCENT } from '../../utils/carteiraItemCompute'
+import {
+  buildItemFromOption,
+  annualYieldPercentFor,
+  describePayout,
+  companyToOption,
+  weightedRateAndCoverage,
+  FALLBACK_RATE_PERCENT,
+} from '../../utils/carteiraItemCompute'
 import { useInvestmentOptions } from '../../hooks/useInvestmentOptions'
 import { useCompanies } from '../../hooks/useCompanies'
 import { RefreshPricesButton } from '../ui/RefreshPricesButton'
 
 import { PortfolioSimulator } from '../PortfolioSimulator/PortfolioSimulator'
-
-// Same mapping PortfolioSimulator uses to turn a company row into a generic
-// InvestmentOption — duplicated here (not imported) because it's defined
-// inline inside that component, not exported.
-function companyToOption(c: ReturnType<typeof useCompanies>['companies'][number]): InvestmentOption {
-  return {
-    id: c.id,
-    assetClass: 'Ações',
-    name: c.name,
-    ticker: c.ticker,
-    description: c.whatItDoes,
-    marketInfo: c.priceApprox,
-    payoutFrequency: c.payoutFrequency,
-    price: c.priceValue,
-    dividendYieldValue: c.dividendYieldValue,
-    dividendReferenceMonth: c.dividendReferenceMonth,
-    nextPaymentDate: c.nextPaymentDate,
-    nextPaymentAmount: c.nextPaymentAmount,
-    nextPaymentLabel: c.nextPaymentLabel,
-    realPaymentFrequency: c.realPaymentFrequency,
-  }
-}
 
 function CarteiraDetail({
   carteira,

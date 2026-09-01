@@ -12,7 +12,7 @@ import {
   type GrowthStream,
 } from '../../utils/finance'
 import type { CarteiraItem, CarteiraState, InvestmentOption } from '../../data/types'
-import { describePayout } from '../../utils/carteiraItemCompute'
+import { describePayout, companyToOption } from '../../utils/carteiraItemCompute'
 import { useInvestmentOptions } from '../../hooks/useInvestmentOptions'
 import { useCompanies } from '../../hooks/useCompanies'
 import { RefreshPricesButton } from '../ui/RefreshPricesButton'
@@ -178,27 +178,8 @@ export function PortfolioSimulator({
     return { cdi: find('cdb'), selic: find('tesouro-selic'), ipca: find('tesouro-ipca') }
   }, [baseOptionsByClass])
 
-  const optionsForClass = (cls: AssetClass): InvestmentOption[] => {
-    if (cls === 'Ações') {
-      return companies.map((c) => ({
-        id: c.id,
-        assetClass: 'Ações',
-        name: c.name,
-        ticker: c.ticker,
-        description: c.whatItDoes,
-        marketInfo: c.priceApprox,
-        payoutFrequency: c.payoutFrequency,
-        price: c.priceValue,
-        dividendYieldValue: c.dividendYieldValue,
-        dividendReferenceMonth: c.dividendReferenceMonth,
-        nextPaymentDate: c.nextPaymentDate,
-        nextPaymentAmount: c.nextPaymentAmount,
-        nextPaymentLabel: c.nextPaymentLabel,
-        realPaymentFrequency: c.realPaymentFrequency,
-      }))
-    }
-    return baseOptionsByClass[cls]
-  }
+  const optionsForClass = (cls: AssetClass): InvestmentOption[] =>
+    cls === 'Ações' ? companies.map(companyToOption) : baseOptionsByClass[cls]
 
   const [initialDraft] = useState<SimulatorDraft | null>(loadDraft)
 

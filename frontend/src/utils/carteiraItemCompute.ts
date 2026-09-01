@@ -77,7 +77,47 @@ export function describePayout(cls: AssetClass, opt: InvestmentOption, qty: numb
       frequencyLabel,
     }
   }
+  // Renda fixa (tesouro-selic/cdb/tesouro-ipca): não tem preço de cota nem
+  // quantidade — o "retorno" aqui é a taxa real (Banco Central), não um R$.
+  if (opt.rateValue != null) {
+    return { returnLabel: `≈${opt.rateValue.toFixed(2).replace('.', ',')}% a.a. (Banco Central)`, frequencyLabel }
+  }
   return { returnLabel: null, frequencyLabel }
+}
+
+/** Same mapping used by PortfolioSimulator/MinhaCarteira to turn a company
+ * row into the generic InvestmentOption shape describePayout/buildItemFromOption expect. */
+export function companyToOption(c: {
+  id: string
+  name: string
+  ticker: string
+  whatItDoes: string
+  priceApprox?: string
+  payoutFrequency?: string
+  priceValue?: number
+  dividendYieldValue?: number
+  dividendReferenceMonth?: string
+  nextPaymentDate?: string
+  nextPaymentAmount?: number
+  nextPaymentLabel?: string
+  realPaymentFrequency?: string
+}): InvestmentOption {
+  return {
+    id: c.id,
+    assetClass: 'Ações',
+    name: c.name,
+    ticker: c.ticker,
+    description: c.whatItDoes,
+    marketInfo: c.priceApprox,
+    payoutFrequency: c.payoutFrequency,
+    price: c.priceValue,
+    dividendYieldValue: c.dividendYieldValue,
+    dividendReferenceMonth: c.dividendReferenceMonth,
+    nextPaymentDate: c.nextPaymentDate,
+    nextPaymentAmount: c.nextPaymentAmount,
+    nextPaymentLabel: c.nextPaymentLabel,
+    realPaymentFrequency: c.realPaymentFrequency,
+  }
 }
 
 export const FALLBACK_RATE_PERCENT = ANNUAL_RATE_BY_RISK.media * 100

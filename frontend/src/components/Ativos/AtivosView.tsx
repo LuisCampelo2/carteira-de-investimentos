@@ -1,37 +1,30 @@
 import { BarChart3, X } from 'lucide-react'
 import { ASSET_CLASSES, ASSET_CLASS_COLORS, formatBRLExact, type AssetClass } from '../../utils/finance'
-import type { Company, InvestmentOption } from '../../data/types'
+import { describePayout, companyToOption } from '../../utils/carteiraItemCompute'
+import type { InvestmentOption } from '../../data/types'
 import { useInvestmentOptions } from '../../hooks/useInvestmentOptions'
 import { useCompanies } from '../../hooks/useCompanies'
 import { RefreshPricesButton } from '../ui/RefreshPricesButton'
 
-const MONTHS_PT = [
-  'jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez',
-]
-
-function formatReferenceMonth(iso: string): string {
-  const [year, month] = iso.split('-')
-  return `${MONTHS_PT[Number(month) - 1]}/${year}`
-}
-
-// Uma linha por ativo, com o que se sabe de real: preço (quando o ativo tem
-// preço unitário público — ações/ETFs/FIIs/cripto) e o rendimento real que
-// já é mostrado no simulador (dividendo/proventos ou taxa Selic/CDI/IPCA para
-// os itens de Renda fixa do catálogo). Nunca mostra número que não
-// veio de refresh real — some para "—" quando não tem.
-function AtivoRow({ name, ticker, price, extra }: { name: string; ticker?: string; price?: number; extra?: React.ReactNode }) {
+// Uma linha por ativo, sempre com as mesmas 3 coisas — preço de compra,
+// retorno estimado (só quando existe dado real) e frequência — as mesmas que
+// aparecem no assistente e no "Editar ativos" (describePayout), pra não
+// mostrar informação diferente dependendo de onde você está olhando o ativo.
+function AtivoRow({ cls, opt }: { cls: AssetClass; opt: InvestmentOption }) {
+  const payout = describePayout(cls, opt, 0)
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm">
       <div className="min-w-0">
         <div className="truncate font-medium text-slate-200">
-          {name}
-          {ticker && ticker !== name && <span className="ml-1.5 text-xs text-slate-500">{ticker}</span>}
+          {opt.name}
+          {opt.ticker && opt.ticker !== opt.name && <span className="ml-1.5 text-xs text-slate-500">{opt.ticker}</span>}
         </div>
-        {extra}
+        {payout.returnLabel && <div className="text-xs text-emerald-400">Retorno: {payout.returnLabel}</div>}
+        {payout.frequencyLabel && <div className="text-xs text-slate-500">{payout.frequencyLabel}</div>}
       </div>
       <div className="shrink-0 text-right">
-        {price != null ? (
-          <div className="font-semibold text-emerald-400">{formatBRLExact(price)}</div>
+        {opt.price != null ? (
+          <div className="font-semibold text-emerald-400">{formatBRLExact(opt.price)}</div>
         ) : (
           <div className="text-xs text-slate-600">sem preço de cota</div>
         )}
@@ -40,61 +33,12 @@ function AtivoRow({ name, ticker, price, extra }: { name: string; ticker?: strin
   )
 }
 
-function CompanyExtra({ c }: { c: Company }) {
-  const hasNextPayment = c.nextPaymentDate && c.nextPaymentAmount != null
-  return (
-    <>
-      {hasNextPayment ? (
-        <div className="text-xs text-slate-500">
-          DY ≈{c.dividendYieldValue!.toFixed(1).replace('.', ',')}% a.a. · próximo {formatBRLExact(c.nextPaymentAmount!)}/un. em{' '}
-          {c.nextPaymentDate!.split('-').reverse().join('/')}
-          {c.realPaymentFrequency ? ` (${c.realPaymentFrequency})` : ''}
-        </div>
-      ) : c.dividendYieldValue != null ? (
-        <div className="text-xs text-slate-500">
-          {c.dividendYieldValue === 0
-            ? `Sem dividendos nos últimos 12 meses${c.dividendReferenceMonth ? ` (dado de ${formatReferenceMonth(c.dividendReferenceMonth)})` : ''}`
-            : `DY ≈${c.dividendYieldValue.toFixed(1).replace('.', ',')}% nos últimos 12 meses${c.dividendReferenceMonth ? ` (dado de ${formatReferenceMonth(c.dividendReferenceMonth)})` : ''}`}
-        </div>
-      ) : null}
-      {/* A frequência já aparece dentro da linha acima quando há calendário real
-          (realPaymentFrequency) — só mostra o texto genérico do payoutFrequency
-          nos outros casos, senão fica repetido. */}
-      {!hasNextPayment && c.payoutFrequency && <div className="text-xs text-slate-500">{c.payoutFrequency}</div>}
-    </>
-  )
-}
-
-function OptionExtra({ opt }: { opt: InvestmentOption }) {
-  return (
-    <>
-      {opt.dividendYieldValue != null ? (
-        <div className="text-xs text-slate-500">
-          Rendeu {opt.dividendYieldValue.toFixed(2).replace('.', ',')}%
-          {opt.dividendReferenceMonth ? ` em ${formatReferenceMonth(opt.dividendReferenceMonth)}` : ''} · Mensal
-        </div>
-      ) : opt.rateValue != null ? (
-        <div className="text-xs text-slate-500">Taxa real ≈{opt.rateValue.toFixed(2).replace('.', ',')}% a.a. (Banco Central)</div>
-      ) : opt.marketInfo ? (
-        <div className="truncate text-xs text-slate-500">{opt.marketInfo}</div>
-      ) : null}
-      {/* Mensal já fica claro na linha de DY acima — só acrescenta o
-          payoutFrequency quando ele traz frequência que ainda não apareceu. */}
-      {opt.dividendYieldValue == null && opt.payoutFrequency && <div className="text-xs text-slate-500">{opt.payoutFrequency}</div>}
-    </>
-  )
-}
-
 export function AtivosView({ onClose }: { onClose: () => void }) {
   const { byClass, loading: optionsLoading, refetch: refetchOptions } = useInvestmentOptions()
   const { companies, loading: companiesLoading, refetch: refetchCompanies } = useCompanies()
 
-  const optionsForClass = (cls: AssetClass): { key: string; name: string; ticker?: string; price?: number; extra: React.ReactNode }[] => {
-    if (cls === 'Ações') {
-      return companies.map((c) => ({ key: c.id, name: c.name, ticker: c.ticker, price: c.priceValue, extra: <CompanyExtra c={c} /> }))
-    }
-    return (byClass[cls] ?? []).map((opt) => ({ key: opt.id, name: opt.name, ticker: opt.ticker, price: opt.price, extra: <OptionExtra opt={opt} /> }))
-  }
+  const optionsForClass = (cls: AssetClass): InvestmentOption[] =>
+    cls === 'Ações' ? companies.map(companyToOption) : (byClass[cls] ?? [])
 
   const loading = optionsLoading || companiesLoading
 
@@ -131,8 +75,8 @@ export function AtivosView({ onClose }: { onClose: () => void }) {
                     {cls} — {items.length} {items.length === 1 ? 'ativo' : 'ativos'}
                   </div>
                   <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {items.map((item) => (
-                      <AtivoRow key={item.key} name={item.name} ticker={item.ticker} price={item.price} extra={item.extra} />
+                    {items.map((opt) => (
+                      <AtivoRow key={opt.id} cls={cls} opt={opt} />
                     ))}
                   </div>
                 </div>
