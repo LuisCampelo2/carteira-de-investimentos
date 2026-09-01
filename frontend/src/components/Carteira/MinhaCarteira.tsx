@@ -8,6 +8,7 @@ import {
   formatBRL,
   formatBRLExact,
   formatPaymentDate,
+  simulatePortfolioGrowth,
   type AssetClass,
   type RiskTolerance,
 } from '../../utils/finance'
@@ -201,6 +202,21 @@ function CarteiraDetail({
     [carteira],
   )
 
+  // Só a estimativa final (sem o gráfico visual) — mesma lógica de streams
+  // por item do PortfolioSimulator: cada ativo rende na sua própria taxa
+  // real quando tem uma, o resto (e qualquer sobra do aporte) na hipotética.
+  const projection = useMemo(() => {
+    const fallbackRate = ANNUAL_RATE_BY_RISK[(carteira.risk as RiskTolerance) || 'media']
+    const streams = carteira.items.map((item) => ({
+      monthlyAmount: item.monthlyAmount,
+      annualRate: (item.estimatedAnnualRate ?? fallbackRate * 100) / 100,
+    }))
+    const leftover = carteira.monthlyContribution - totalMonthly
+    if (leftover > 0.005) streams.push({ monthlyAmount: leftover, annualRate: fallbackRate })
+    const points = simulatePortfolioGrowth(carteira.initialAmount, fallbackRate, carteira.years, streams)
+    return points[points.length - 1]
+  }, [carteira, totalMonthly])
+
   return (
     <div className="space-y-4">
       <div className="no-print flex items-center justify-between gap-2">
@@ -362,6 +378,14 @@ function CarteiraDetail({
           <div className="rounded-lg border border-slate-700/50 px-3 py-2">
             <div className="text-[11px] uppercase tracking-wide text-slate-500">Taxa usada na projeção</div>
             <div className="text-slate-200">≈{effectiveRatePercent.toFixed(1).replace('.', ',')}% a.a.</div>
+          </div>
+          <div className="rounded-lg border border-slate-700/50 px-3 py-2">
+            <div className="text-[11px] uppercase tracking-wide text-slate-500">Total aportado até lá</div>
+            <div className="text-slate-200">{formatBRL(projection.invested)}</div>
+          </div>
+          <div className="rounded-lg border border-slate-700/50 px-3 py-2">
+            <div className="text-[11px] uppercase tracking-wide text-slate-500">Projeção final</div>
+            <div className="font-medium text-emerald-400">{formatBRL(projection.projected)}</div>
           </div>
         </div>
         {carteira.estimatedAnnualRate != null && (
