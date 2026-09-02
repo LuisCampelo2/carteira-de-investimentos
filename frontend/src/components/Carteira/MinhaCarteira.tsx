@@ -45,9 +45,16 @@ function CarteiraDetail({
   const { companies, refetch: refetchCompanies } = useCompanies()
   const [addAtivosOpen, setAddAtivosOpen] = useState(false)
   const [addClass, setAddClass] = useState<AssetClass>('Ações')
-  const [addQty, setAddQty] = useState(1)
-  const [addAmount, setAddAmount] = useState(0)
+  // Por id de opção, não um único valor global — senão o +/- de uma linha
+  // mexia no número mostrado em todas as outras linhas da lista.
+  const [addQtyById, setAddQtyById] = useState<Record<string, number>>({})
+  const [addAmountById, setAddAmountById] = useState<Record<string, number>>({})
   const [addSaving, setAddSaving] = useState(false)
+
+  const qtyFor = (optId: string) => addQtyById[optId] ?? 1
+  const amountFor = (optId: string) => addAmountById[optId] ?? 0
+  const setQtyFor = (optId: string, qty: number) => setAddQtyById((prev) => ({ ...prev, [optId]: qty }))
+  const setAmountFor = (optId: string, amount: number) => setAddAmountById((prev) => ({ ...prev, [optId]: amount }))
 
   const optionsForClass = (cls: AssetClass): InvestmentOption[] =>
     cls === 'Ações' ? companies.map(companyToOption) : baseOptionsByClass[cls] ?? []
@@ -137,7 +144,7 @@ function CarteiraDetail({
     .reduce((sum, i) => sum + i.monthlyAmount, 0)
   const classRemaining = classBudget == null ? Infinity : Math.max(0, classBudget - classSpentNow)
 
-  const addCost = (opt: InvestmentOption): number => (opt.price != null ? opt.price * addQty : addAmount)
+  const addCost = (opt: InvestmentOption): number => (opt.price != null ? opt.price * qtyFor(opt.id) : amountFor(opt.id))
 
   const handleAddAtivo = async (opt: InvestmentOption) => {
     if (addCost(opt) > classRemaining + 0.005) return
@@ -151,15 +158,15 @@ function CarteiraDetail({
       const mergedItem = buildItemFromOption(
         addClass,
         opt,
-        (existing?.quantity ?? 0) + addQty,
-        (existing?.monthlyAmount ?? 0) + addAmount,
+        (existing?.quantity ?? 0) + qtyFor(opt.id),
+        (existing?.monthlyAmount ?? 0) + amountFor(opt.id),
       )
       const nextItems = existing
         ? carteira.items.map((i) => (i.id === targetId ? mergedItem : i))
         : [...carteira.items, mergedItem]
       await saveWithRecomputedRate(nextItems, baseOptionsByClass, companies)
-      setAddQty(1)
-      setAddAmount(0)
+      setQtyFor(opt.id, 1)
+      setAmountFor(opt.id, 0)
     } finally {
       setAddSaving(false)
     }
@@ -260,11 +267,7 @@ function CarteiraDetail({
             <div className="text-sm font-medium text-slate-200">Adicionar ativo</div>
             <select
               value={addClass}
-              onChange={(e) => {
-                setAddClass(e.target.value as AssetClass)
-                setAddQty(1)
-                setAddAmount(0)
-              }}
+              onChange={(e) => setAddClass(e.target.value as AssetClass)}
               className="rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-sky-500"
             >
               {ASSET_CLASSES.filter((c) => c !== 'Renda fixa').map((c) => (
@@ -293,7 +296,9 @@ function CarteiraDetail({
             {addOptions.length === 0 && <p className="text-xs text-slate-500">Nenhuma opção carregada para esta classe.</p>}
             {addOptions.map((opt) => {
               const already = alreadyAddedIds.has(opt.id)
-              const payout = describePayout(addClass, opt, addQty)
+              const qty = qtyFor(opt.id)
+              const amount = amountFor(opt.id)
+              const payout = describePayout(addClass, opt, qty)
               return (
                 <div
                   key={opt.id}
@@ -313,15 +318,15 @@ function CarteiraDetail({
                     {opt.price != null ? (
                       <>
                         <button
-                          onClick={() => setAddQty((q) => Math.max(1, q - 1))}
+                          onClick={() => setQtyFor(opt.id, Math.max(1, qty - 1))}
                           className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-slate-300 hover:border-slate-400"
                         >
                           <Minus size={12} />
                         </button>
-                        <span className="w-5 text-center text-sm text-slate-200">{addQty}</span>
+                        <span className="w-5 text-center text-sm text-slate-200">{qty}</span>
                         <button
-                          onClick={() => setAddQty((q) => q + 1)}
-                          disabled={opt.price * (addQty + 1) > classRemaining + 0.005}
+                          onClick={() => setQtyFor(opt.id, qty + 1)}
+                          disabled={opt.price * (qty + 1) > classRemaining + 0.005}
                           className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-slate-300 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-30"
                         >
                           <Plus size={12} />
@@ -331,15 +336,15 @@ function CarteiraDetail({
                       <input
                         type="number"
                         min={0}
-                        value={addAmount === 0 ? '' : addAmount}
-                        onChange={(e) => setAddAmount(e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
+                        value={amount === 0 ? '' : amount}
+                        onChange={(e) => setAmountFor(opt.id, e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
                         placeholder="R$/mês"
                         className="w-20 appearance-none rounded-lg border border-slate-700 bg-slate-900/60 px-2 py-1 text-right text-sm text-slate-200 outline-none placeholder:text-slate-600 [-moz-appearance:textfield] focus:border-sky-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       />
                     )}
                     <button
                       onClick={() => handleAddAtivo(opt)}
-                      disabled={addSaving || (opt.price == null && addAmount <= 0) || addCost(opt) > classRemaining + 0.005}
+                      disabled={addSaving || (opt.price == null && amount <= 0) || addCost(opt) > classRemaining + 0.005}
                       className="shrink-0 rounded-lg border border-sky-500 px-2.5 py-1 text-xs font-medium text-sky-300 hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Adicionar
