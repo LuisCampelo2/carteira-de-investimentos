@@ -143,8 +143,21 @@ function CarteiraDetail({
     if (addCost(opt) > classRemaining + 0.005) return
     setAddSaving(true)
     try {
-      const newItem = buildItemFromOption(addClass, opt, addQty, addAmount)
-      await saveWithRecomputedRate([...carteira.items, newItem], baseOptionsByClass, companies)
+      // Um item já com esse id (mesma classe:ativo) vira soma em vez de uma
+      // segunda linha duplicada — dois itens com o mesmo id quebrava a
+      // exclusão (apagar um apagava os dois, já que ela filtra por id).
+      const targetId = `${addClass}:${opt.id}`
+      const existing = carteira.items.find((i) => i.id === targetId)
+      const mergedItem = buildItemFromOption(
+        addClass,
+        opt,
+        (existing?.quantity ?? 0) + addQty,
+        (existing?.monthlyAmount ?? 0) + addAmount,
+      )
+      const nextItems = existing
+        ? carteira.items.map((i) => (i.id === targetId ? mergedItem : i))
+        : [...carteira.items, mergedItem]
+      await saveWithRecomputedRate(nextItems, baseOptionsByClass, companies)
       setAddQty(1)
       setAddAmount(0)
     } finally {
