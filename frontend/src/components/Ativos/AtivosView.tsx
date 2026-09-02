@@ -33,7 +33,7 @@ function AtivoRow({ cls, opt }: { cls: AssetClass; opt: InvestmentOption }) {
   )
 }
 
-export function AtivosView({ onClose }: { onClose: () => void }) {
+export function AtivosView({ onClose }: { onClose?: () => void }) {
   const { byClass, loading: optionsLoading, refetch: refetchOptions } = useInvestmentOptions()
   const { companies, loading: companiesLoading, refetch: refetchCompanies } = useCompanies()
 
@@ -48,9 +48,11 @@ export function AtivosView({ onClose }: { onClose: () => void }) {
         <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-100">
           <BarChart3 size={18} className="text-sky-400" /> Todos os Ativos
         </h2>
-        <button onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200">
-          <X size={18} />
-        </button>
+        {onClose && (
+          <button onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200">
+            <X size={18} />
+          </button>
+        )}
       </div>
 
       <div className="border-b border-slate-800 px-5 py-3">

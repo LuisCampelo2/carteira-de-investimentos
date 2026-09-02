@@ -2,19 +2,19 @@ import { useCallback, useEffect, useState } from 'react'
 import { Header } from './components/Layout/Header'
 import { MinhaCarteira } from './components/Carteira/MinhaCarteira'
 import { AtivosView } from './components/Ativos/AtivosView'
-import { Home } from './pages/Home'
 import { useCarteiras } from './hooks/useCarteiras'
 
-type View = 'home' | 'carteira' | 'ativos'
+type View = 'carteira' | 'ativos'
 type NavState = { view: View; carteiraId?: number }
 
-const HOME_STATE: NavState = { view: 'home' }
+// Ativos is the main/default screen — "/" and any unknown path land here.
+const HOME_STATE: NavState = { view: 'ativos' }
 
 // Every screen gets a real URL, so refreshing (F5) or sharing a link lands
-// back on the same page instead of always resetting to home — this is the
+// back on the same page instead of always resetting home — this is the
 // only place that maps between NavState and the address bar.
 function stateToPath(state: NavState): string {
-  if (state.view === 'home') return '/'
+  if (state.view === 'ativos') return '/'
   if (state.view === 'carteira' && state.carteiraId != null) return `/carteira/${state.carteiraId}`
   return `/${state.view}`
 }
@@ -23,7 +23,7 @@ function pathToState(pathname: string): NavState {
   const carteiraMatch = pathname.match(/^\/carteira\/(\d+)\/?$/)
   if (carteiraMatch) return { view: 'carteira', carteiraId: Number(carteiraMatch[1]) }
   const view = pathname.replace(/^\/|\/$/g, '')
-  if (view === 'carteira' || view === 'ativos') return { view }
+  if (view === 'carteira') return { view }
   return HOME_STATE
 }
 
@@ -64,20 +64,15 @@ export default function App() {
     (id: number | null) => navigate({ view: 'carteira', carteiraId: id ?? undefined }),
     [navigate],
   )
-  const openAtivos = useCallback(() => navigate({ view: 'ativos' }), [navigate])
   const goHome = useCallback(() => navigate(HOME_STATE), [navigate])
-
-  if (view === 'home') {
-    return (
-      <div className="h-screen w-screen overflow-hidden bg-slate-950 text-slate-200">
-        <Home carteiraCount={carteiras.length} onOpenCarteira={openCarteira} onOpenAtivos={openAtivos} />
-      </div>
-    )
-  }
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-200">
-      <Header carteiraCount={carteiras.length} onOpenCarteira={openCarteira} onOpenAtivos={openAtivos} onGoHome={goHome} />
+      <Header
+        carteiraCount={carteiras.length}
+        onOpenCarteira={openCarteira}
+        onGoHome={view !== 'ativos' ? goHome : undefined}
+      />
 
       <div className="relative flex-1 overflow-hidden">
         {view === 'carteira' && (
@@ -98,7 +93,7 @@ export default function App() {
 
         {view === 'ativos' && (
           <div className="mx-auto h-full w-full max-w-4xl">
-            <AtivosView onClose={goHome} />
+            <AtivosView />
           </div>
         )}
       </div>
