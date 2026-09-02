@@ -26,6 +26,10 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname = 'mapa_menta
 mkdir -p /var/www
 if [ -d /var/www/mapa-mental-investimento/.git ]; then
   cd /var/www/mapa-mental-investimento
+  # O passo abaixo sempre regenera package-lock.json localmente (linux-x64,
+  # diferente do gerado no Windows do dev) — sem descartar essa mudança antes,
+  # o próximo git pull recusa por achar que ia sobrescrever edição local.
+  git checkout -- package-lock.json 2>/dev/null || true
   git pull
 else
   git clone https://github.com/LuisCampelo2/carteira-de-investimentos.git /var/www/mapa-mental-investimento
