@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, BookOpen, PiggyBank, TrendingUp } from 'lucide-react'
+import { ArrowLeft, BarChart3, PiggyBank, TrendingUp } from 'lucide-react'
 import { SearchBar } from '../Search/SearchBar'
 
 export function Header({
@@ -6,7 +6,6 @@ export function Header({
   total,
   carteiraCount,
   onSelectSearch,
-  onOpenGlossary,
   onOpenCarteira,
   onOpenAtivos,
   onGoHome,
@@ -15,7 +14,6 @@ export function Header({
   total: number
   carteiraCount: number
   onSelectSearch: (aulaId: string, conceptId: string) => void
-  onOpenGlossary: () => void
   onOpenCarteira: () => void
   onOpenAtivos: () => void
   onGoHome?: () => void
@@ -63,12 +61,6 @@ export function Header({
           {carteiraCount > 0 && (
             <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">{carteiraCount}</span>
           )}
-        </button>
-        <button
-          onClick={onOpenGlossary}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/80 px-2.5 py-1.5 text-xs font-medium text-slate-300 hover:border-slate-500 hover:text-slate-100 sm:px-3"
-        >
-          <BookOpen size={14} /> <span className="hidden sm:inline">Glossário</span>
         </button>
         <button
           onClick={onOpenAtivos}

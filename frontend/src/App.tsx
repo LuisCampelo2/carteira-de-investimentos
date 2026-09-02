@@ -3,7 +3,6 @@ import { Header } from './components/Layout/Header'
 import { MindMapView } from './components/MindMap/MindMapView'
 import { MobileTree } from './components/MindMap/MobileTree'
 import { LessonPanel } from './components/LessonPanel/LessonPanel'
-import { GlossaryView } from './components/Glossary/GlossaryView'
 import { MinhaCarteira } from './components/Carteira/MinhaCarteira'
 import { AtivosView } from './components/Ativos/AtivosView'
 import { Home } from './pages/Home'
@@ -13,7 +12,7 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import { getAulaById } from './data/aulas'
 
 type Drawer = { type: 'aula'; aulaId: string; conceptId?: string } | null
-type View = 'home' | 'mapa' | 'glossario' | 'carteira' | 'ativos'
+type View = 'home' | 'mapa' | 'carteira' | 'ativos'
 type NavState = { view: View; drawer: Drawer; carteiraId?: number }
 
 const HOME_STATE: NavState = { view: 'home', drawer: null }
@@ -43,7 +42,7 @@ function pathToState(pathname: string, search: string): NavState {
   const carteiraMatch = pathname.match(/^\/carteira\/(\d+)\/?$/)
   if (carteiraMatch) return { view: 'carteira', drawer: null, carteiraId: Number(carteiraMatch[1]) }
   const view = pathname.replace(/^\/|\/$/g, '')
-  if (view === 'mapa' || view === 'glossario' || view === 'carteira' || view === 'ativos') return { view, drawer: null }
+  if (view === 'mapa' || view === 'carteira' || view === 'ativos') return { view, drawer: null }
   return HOME_STATE
 }
 
@@ -102,7 +101,6 @@ export default function App() {
     [markStarted, navigate],
   )
 
-  const openGlossary = useCallback(() => navigate({ view: 'glossario', drawer: null }), [navigate])
   const openCarteira = useCallback(() => navigate({ view: 'carteira', drawer: null }), [navigate])
   const selectCarteira = useCallback(
     (id: number | null) => navigate({ view: 'carteira', drawer: null, carteiraId: id ?? undefined }),
@@ -132,7 +130,6 @@ export default function App() {
           total={total}
           carteiraCount={carteiras.length}
           onOpenMapa={goToMapa}
-          onOpenGlossario={openGlossary}
           onOpenCarteira={openCarteira}
           onOpenAtivos={openAtivos}
         />
@@ -147,7 +144,6 @@ export default function App() {
         total={total}
         carteiraCount={carteiras.length}
         onSelectSearch={openConcept}
-        onOpenGlossary={openGlossary}
         onOpenCarteira={openCarteira}
         onOpenAtivos={openAtivos}
         onGoHome={goHome}
@@ -184,12 +180,6 @@ export default function App() {
               </div>
             )}
           </>
-        )}
-
-        {view === 'glossario' && (
-          <div className="mx-auto h-full w-full max-w-3xl">
-            <GlossaryView onClose={goHome} />
-          </div>
         )}
 
         {view === 'carteira' && (

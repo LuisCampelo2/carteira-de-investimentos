@@ -1,16 +1,15 @@
-import { BarChart3, BookOpen, PiggyBank, TrendingUp, Workflow } from 'lucide-react'
+import { BarChart3, PiggyBank, TrendingUp, Workflow } from 'lucide-react'
 
 interface HomeProps {
   completed: number
   total: number
   carteiraCount: number
   onOpenMapa: () => void
-  onOpenGlossario: () => void
   onOpenCarteira: () => void
   onOpenAtivos: () => void
 }
 
-export function Home({ completed, total, carteiraCount, onOpenMapa, onOpenGlossario, onOpenCarteira, onOpenAtivos }: HomeProps) {
+export function Home({ completed, total, carteiraCount, onOpenMapa, onOpenCarteira, onOpenAtivos }: HomeProps) {
   return (
     <div className="flex h-full w-full flex-col items-center overflow-y-auto bg-slate-950 px-4 py-10">
       {/* my-auto (not justify-center on the parent) so it centers vertically
@@ -31,7 +30,7 @@ export function Home({ completed, total, carteiraCount, onOpenMapa, onOpenGlossa
           <span>Aporte estudado: R$400/mês</span>
         </div>
 
-        <div className="mt-10 grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-10 grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <button
             onClick={onOpenMapa}
             className="group flex flex-col items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/60 px-6 py-8 text-center transition-colors hover:border-sky-500 hover:bg-sky-500/10"
@@ -41,17 +40,6 @@ export function Home({ completed, total, carteiraCount, onOpenMapa, onOpenGlossa
             </span>
             <span className="text-base font-semibold text-slate-100">Mapa Mental</span>
             <span className="text-xs text-slate-500">Explore as 10 aulas em um mapa interativo</span>
-          </button>
-
-          <button
-            onClick={onOpenGlossario}
-            className="group flex flex-col items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/60 px-6 py-8 text-center transition-colors hover:border-sky-500 hover:bg-sky-500/10"
-          >
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-500/15 text-violet-400 transition-transform group-hover:scale-105">
-              <BookOpen size={24} />
-            </span>
-            <span className="text-base font-semibold text-slate-100">Glossário</span>
-            <span className="text-xs text-slate-500">Termos e conceitos de investimentos explicados</span>
           </button>
 
           <button

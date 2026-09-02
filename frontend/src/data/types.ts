@@ -30,11 +30,6 @@ export interface Aula {
   special?: 'company-analyzer' | 'portfolio-builder'
 }
 
-export interface GlossaryTerm {
-  term: string
-  definition: string
-}
-
 export interface QuizQuestion {
   question: string
   options: string[]
