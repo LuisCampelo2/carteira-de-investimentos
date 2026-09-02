@@ -42,6 +42,13 @@ npm install
 # outro Postgres) — nesse caso o apt aloca a próxima porta livre pro
 # cluster que acabamos de criar. Detecta a porta real em vez de assumir 5432.
 PG_PORT=$(pg_lsclusters -h | awk '{print $3}' | head -n1)
+# Preserva um BRAPI_TOKEN já configurado manualmente num deploy anterior —
+# sem isso, rodar o script de novo apagava o token e as ações/ETFs/FIIs
+# paravam de atualizar preço até alguém notar e configurar tudo de novo.
+EXISTING_BRAPI_TOKEN=""
+if [ -f backend/.env ]; then
+  EXISTING_BRAPI_TOKEN=$(grep '^BRAPI_TOKEN=' backend/.env | head -n1 | cut -d'=' -f2-)
+fi
 cat > backend/.env <<EOF
 PGHOST=localhost
 PGPORT=${PG_PORT}
@@ -49,7 +56,7 @@ PGUSER=mapa_mental
 PGPASSWORD=${DB_PASSWORD}
 PGDATABASE=mapa_mental_investimento
 PORT=3002
-BRAPI_TOKEN=
+BRAPI_TOKEN=${EXISTING_BRAPI_TOKEN}
 EOF
 
 # 5. Build

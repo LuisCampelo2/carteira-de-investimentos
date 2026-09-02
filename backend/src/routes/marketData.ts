@@ -83,17 +83,24 @@ marketDataRouter.post('/refresh', async (_req, res) => {
       'lci-lca',
       `Costumam pagar 85% a 95% do CDI (≈${formatBRL(cdiAcumulado12m)}% a.a.), mas isentas de IR — rendimento líquido pode superar CDB (${tag}).`,
     )
+    // Sem uma emissão real pra puxar a taxa exata, usa o meio da faixa
+    // (90% do CDI) como estimativa — mesma lógica do CDB, que usa o CDI
+    // cheio (100%) como ponto médio da faixa "100% a 120%" dele.
+    await updateRateValue('lci-lca', cdiAcumulado12m * 0.9)
     updated.push('Renda fixa (Selic/CDI/IPCA via Banco Central)')
   } catch (err) {
     errors.push(`Selic/CDI/IPCA (Banco Central): ${(err as Error).message}`)
   }
 
-  // Criptomoedas via CoinGecko — sem necessidade de chave.
+  // Criptomoedas via CoinGecko — sem necessidade de chave. Busca em USD e BRL
+  // (não só USD) pra também preencher price_value — sem isso essas opções
+  // ficavam sem preço numérico, e o simulador não conseguia calcular
+  // quantidade/valor mensal pra elas como faz com ações/ETFs/FIIs.
   try {
-    const ids = ['bitcoin', 'ethereum', 'solana', 'binancecoin', 'ripple']
-    const cgRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`)
+    const ids = ['bitcoin', 'ethereum', 'solana', 'binancecoin', 'ripple', 'tether']
+    const cgRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd,brl`)
     if (!cgRes.ok) throw new Error(`CoinGecko respondeu ${cgRes.status}`)
-    const prices = (await cgRes.json()) as Record<string, { usd: number }>
+    const prices = (await cgRes.json()) as Record<string, { usd: number; brl: number }>
 
     const cryptoIdByOption: Record<string, string> = {
       bitcoin: 'bitcoin',
@@ -101,15 +108,18 @@ marketDataRouter.post('/refresh', async (_req, res) => {
       solana: 'solana',
       bnb: 'binancecoin',
       xrp: 'ripple',
+      stablecoin: 'tether',
     }
     let okCount = 0
     for (const [optionId, cgId] of Object.entries(cryptoIdByOption)) {
       const usd = prices[cgId]?.usd
-      if (typeof usd !== 'number') continue
-      await updateMarketInfo(
-        optionId,
+      const brl = prices[cgId]?.brl
+      if (typeof usd !== 'number' || typeof brl !== 'number') continue
+      await pool.query('UPDATE investment_options SET market_info = $1, price_value = $2 WHERE id = $3', [
         `≈ US$ ${usd.toLocaleString('pt-BR', { maximumFractionDigits: usd < 10 ? 2 : 0 })} (${tag}) — alta volatilidade.`,
-      )
+        brl,
+        optionId,
+      ])
       okCount++
     }
     if (okCount > 0) updated.push(`Criptomoedas (CoinGecko)`)
