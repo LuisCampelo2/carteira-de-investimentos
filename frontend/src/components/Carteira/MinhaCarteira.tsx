@@ -129,8 +129,9 @@ function CarteiraDetail({
   // ao montar a carteira, agora respeitado aqui também. Carteiras salvas
   // antes de classPercents existir não têm esse dado: nesse caso não trava
   // (null = sem teto conhecido) em vez de bloquear tudo em zero.
-  const classBudget =
-    carteira.classPercents?.[addClass] != null ? (carteira.monthlyContribution * carteira.classPercents[addClass]) / 100 : null
+  const classBudgetFor = (cls: AssetClass): number | null =>
+    carteira.classPercents?.[cls] != null ? (carteira.monthlyContribution * carteira.classPercents[cls]) / 100 : null
+  const classBudget = classBudgetFor(addClass)
   const classSpentNow = carteira.items
     .filter((i) => i.assetClass === addClass)
     .reduce((sum, i) => sum + i.monthlyAmount, 0)
@@ -388,10 +389,19 @@ function CarteiraDetail({
         </div>
 
         <div className="space-y-3">
-          {ASSET_CLASSES.filter((cls) => carteira.items.some((i) => i.assetClass === cls)).map((cls) => (
+          {ASSET_CLASSES.filter((cls) => carteira.items.some((i) => i.assetClass === cls)).map((cls) => {
+            const budget = classBudgetFor(cls)
+            return (
             <div key={cls}>
-              <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide" style={{ color: ASSET_CLASS_COLORS[cls] }}>
-                {cls} — {(percentByClass[cls] ?? 0).toFixed(0)}%
+              <div className="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs font-semibold uppercase tracking-wide" style={{ color: ASSET_CLASS_COLORS[cls] }}>
+                <span>
+                  {cls} — {(percentByClass[cls] ?? 0).toFixed(0)}%
+                </span>
+                <span className="font-normal normal-case text-slate-500">
+                  {budget != null
+                    ? `separado: ${formatBRL(budget)}/mês (${carteira.classPercents![cls]}%)`
+                    : 'sem % por classe salvo nesta carteira'}
+                </span>
               </div>
               <ul className="space-y-1.5">
                 {carteira.items
@@ -441,7 +451,8 @@ function CarteiraDetail({
                   ))}
               </ul>
             </div>
-          ))}
+            )
+          })}
         </div>
 
         {incomeSummary.withData > 0 && (
