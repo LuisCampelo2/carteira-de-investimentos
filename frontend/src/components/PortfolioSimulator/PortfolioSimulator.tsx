@@ -89,6 +89,29 @@ function formatTaxaLabel(tipo: TaxaTipo, valor: number): string {
   }
 }
 
+// Inverso de formatTaxaLabel — dá pra fazer com segurança porque é um formato
+// fixo que a gente mesmo gera (não texto livre digitado por alguém), usado
+// só para reconstruir {taxaTipo, taxaValor} de um item de Renda fixa salvo
+// (que só guarda o texto já formatado) quando "Refazer simulação" pré-popula
+// o assistente. As três variantes "+ X% a.a." são checadas antes da genérica
+// "X% a.a." (flat), senão CDI/Selic/IPCA + spread cairiam em flat por engano.
+function parseTaxaLabel(label: string): { taxaTipo: TaxaTipo; taxaValor: number } | null {
+  const num = (s: string) => Number(s.replace(/\./g, '').replace(',', '.'))
+  let m = label.match(/^CDI \+ (.+)% a\.a\.$/)
+  if (m) return { taxaTipo: 'cdi_spread', taxaValor: num(m[1]) }
+  m = label.match(/^Selic \+ (.+)% a\.a\.$/)
+  if (m) return { taxaTipo: 'selic_spread', taxaValor: num(m[1]) }
+  m = label.match(/^IPCA \+ (.+)% a\.a\.$/)
+  if (m) return { taxaTipo: 'ipca_spread', taxaValor: num(m[1]) }
+  m = label.match(/^(.+)% do CDI$/)
+  if (m) return { taxaTipo: 'pct_cdi', taxaValor: num(m[1]) }
+  m = label.match(/^(.+)% da Selic$/)
+  if (m) return { taxaTipo: 'pct_selic', taxaValor: num(m[1]) }
+  m = label.match(/^(.+)% a\.a\.$/)
+  if (m) return { taxaTipo: 'flat', taxaValor: num(m[1]) }
+  return null
+}
+
 // Determinístico — não tem texto pra interpretar. Só retorna null quando o
 // índice de referência (CDI/Selic/IPCA) ainda não carregou do backend; nesse
 // caso o item cai na taxa hipotética até os dados reais chegarem.
@@ -160,14 +183,81 @@ function clearDraft() {
   }
 }
 
+// "Refazer simulação" — reconstrói o estado do assistente a partir de uma
+// carteira já salva, pra você ajustar o que mudou em vez de digitar tudo de
+// novo do zero. classPercents já vem pronto (persistido); os itens viram
+// quantities/customOptions/rendaFixaEntries de volta. Um ativo cuja classe
+// não existe mais no catálogo (removida do produto) é ignorado — não tem
+// como reconstruir uma classe que não existe mais.
+function carteiraToDraft(carteira: CarteiraState): SimulatorDraft {
+  const percents = Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, carteira.classPercents?.[cls] ?? 0])) as Record<
+    AssetClass,
+    number
+  >
+  const addedClasses = ASSET_CLASSES.filter((cls) => (percents[cls] ?? 0) > 0)
+  const quantities = Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, {} as Record<string, number>])) as Record<
+    AssetClass,
+    Record<string, number>
+  >
+  const customOptions = Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, [] as InvestmentOption[]])) as Record<
+    AssetClass,
+    InvestmentOption[]
+  >
+  const rendaFixaEntries: RendaFixaEntry[] = []
+
+  for (const item of carteira.items) {
+    const cls = item.assetClass as AssetClass
+    if (!ASSET_CLASSES.includes(cls)) continue
+
+    if (cls === 'Renda fixa') {
+      const parsed = item.rendaFixaTaxa ? parseTaxaLabel(item.rendaFixaTaxa) : null
+      rendaFixaEntries.push({
+        id: item.id,
+        tipo: item.rendaFixaTipo ?? RENDA_FIXA_TIPOS[0],
+        taxaTipo: parsed?.taxaTipo ?? 'flat',
+        taxaValor: parsed?.taxaValor ?? item.estimatedAnnualRate ?? 0,
+        vencimento: item.rendaFixaVencimento ?? '',
+        temIR: item.rendaFixaAvisos?.includes('Tem IR') ?? false,
+        temTaxas: item.rendaFixaAvisos?.includes('Tem taxas') ?? false,
+        temCarencia: item.rendaFixaAvisos?.includes('Tem carência') ?? false,
+        valor: item.monthlyAmount,
+      })
+      continue
+    }
+
+    const optId = item.id.slice(item.id.indexOf(':') + 1)
+    if (optId.startsWith('custom-')) {
+      customOptions[cls] = [
+        ...customOptions[cls],
+        { id: optId, assetClass: cls, name: item.name, ticker: item.ticker, description: 'Investimento adicionado por você.' },
+      ]
+    }
+    quantities[cls][optId] = item.quantity ?? 1
+  }
+
+  return {
+    name: carteira.name,
+    step: 'alocacao',
+    initial: carteira.initialAmount,
+    monthly: carteira.monthlyContribution,
+    years: carteira.years,
+    percents,
+    addedClasses,
+    quantities,
+    customOptions,
+    rendaFixaEntries,
+  }
+}
+
 export function PortfolioSimulator({
   onConfirm,
-  defaultName,
+  defaultCarteira,
 }: {
   onConfirm: (carteira: Omit<CarteiraState, 'id'>) => void
-  /** Pre-fills the name field — used when "Refazer simulação" replaces an
-   * existing carteira's data, so the name carries over instead of starting blank. */
-  defaultName?: string
+  /** "Refazer simulação" — pré-popula todo o assistente (nome, aporte,
+   * horizonte, % por classe, ativos, renda fixa) a partir de uma carteira já
+   * salva, em vez de abrir tudo em branco. */
+  defaultCarteira?: CarteiraState
 }) {
   const { byClass: baseOptionsByClass, loading: optionsLoading, refetch: refetchOptions } = useInvestmentOptions()
   const { companies, loading: companiesLoading, refetch: refetchCompanies } = useCompanies()
@@ -181,38 +271,51 @@ export function PortfolioSimulator({
   const optionsForClass = (cls: AssetClass): InvestmentOption[] =>
     cls === 'Ações' ? companies.map(companyToOption) : baseOptionsByClass[cls]
 
-  const [initialDraft] = useState<SimulatorDraft | null>(loadDraft)
+  // O rascunho do sessionStorage só faz sentido pra retomar uma sessão
+  // interrompida do MESMO fluxo — se está refazendo uma carteira específica,
+  // a fonte de verdade é ela, não um rascunho de outra carteira/sessão que
+  // por acaso ficou salvo na aba.
+  const [initialDraft] = useState<SimulatorDraft | null>(() => (defaultCarteira ? null : loadDraft()))
+  const carteiraDraft = useMemo(() => (defaultCarteira ? carteiraToDraft(defaultCarteira) : null), [defaultCarteira])
 
-  const [name, setName] = useState(initialDraft?.name ?? defaultName ?? '')
-  const [step, setStep] = useState<Step>(initialDraft?.step ?? 'alocacao')
-  const [initial, setInitial] = useState(initialDraft?.initial ?? 0)
-  const [monthly, setMonthly] = useState(initialDraft?.monthly ?? 0)
-  const [years, setYears] = useState(initialDraft?.years ?? 0)
+  const [name, setName] = useState(initialDraft?.name ?? carteiraDraft?.name ?? '')
+  const [step, setStep] = useState<Step>(initialDraft?.step ?? carteiraDraft?.step ?? 'alocacao')
+  const [initial, setInitial] = useState(initialDraft?.initial ?? carteiraDraft?.initial ?? 0)
+  const [monthly, setMonthly] = useState(initialDraft?.monthly ?? carteiraDraft?.monthly ?? 0)
+  const [years, setYears] = useState(initialDraft?.years ?? carteiraDraft?.years ?? 0)
   // Não é mais escolhido pelo usuário — só uma taxa hipotética interna, usada
   // como fallback na projeção para a parte da carteira sem dado real de
   // rendimento (ver portfolioAnnualRate/portfolioStreams).
   const risk = 'media'
   const [percents, setPercents] = useState<Record<AssetClass, number>>(
     () =>
-      initialDraft?.percents ?? (Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, 0])) as Record<AssetClass, number>),
+      initialDraft?.percents ??
+      carteiraDraft?.percents ??
+      (Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, 0])) as Record<AssetClass, number>),
   )
-  const [addedClasses, setAddedClasses] = useState<AssetClass[]>(initialDraft?.addedClasses ?? [])
+  const [addedClasses, setAddedClasses] = useState<AssetClass[]>(
+    initialDraft?.addedClasses ?? carteiraDraft?.addedClasses ?? [],
+  )
   const [dragOver, setDragOver] = useState(false)
   // Quantity of each asset id within its class (0 or missing = not in the cart).
   const [quantities, setQuantities] = useState<Record<AssetClass, Record<string, number>>>(
     () =>
       initialDraft?.quantities ??
+      carteiraDraft?.quantities ??
       (Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, {} as Record<string, number>])) as Record<AssetClass, Record<string, number>>),
   )
   const [customOptions, setCustomOptions] = useState<Record<AssetClass, InvestmentOption[]>>(
     () =>
       initialDraft?.customOptions ??
+      carteiraDraft?.customOptions ??
       (Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, [] as InvestmentOption[]])) as Record<AssetClass, InvestmentOption[]>),
   )
   const [customInput, setCustomInput] = useState<Record<AssetClass, string>>(() =>
     Object.fromEntries(ASSET_CLASSES.map((cls) => [cls, ''])) as Record<AssetClass, string>,
   )
-  const [rendaFixaEntries, setRendaFixaEntries] = useState<RendaFixaEntry[]>(initialDraft?.rendaFixaEntries ?? [])
+  const [rendaFixaEntries, setRendaFixaEntries] = useState<RendaFixaEntry[]>(
+    initialDraft?.rendaFixaEntries ?? carteiraDraft?.rendaFixaEntries ?? [],
+  )
   const [rfTipo, setRfTipo] = useState(RENDA_FIXA_TIPOS[0])
   const [rfTaxaTipo, setRfTaxaTipo] = useState<TaxaTipo>('pct_cdi')
   const [rfTaxaValor, setRfTaxaValor] = useState(0)

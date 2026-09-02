@@ -579,7 +579,7 @@ export function MinhaCarteira({
               ← Voltar para "{selected.name}"
             </button>
             <PortfolioSimulator
-              defaultName={selected.name}
+              defaultCarteira={selected}
               onConfirm={(next) => {
                 onUpdateCarteira(selected.id, next).then(() => setWizardMode(null))
               }}
