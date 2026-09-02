@@ -35,5 +35,3 @@ export interface CarteiraState {
   classPercents?: Record<string, number>
   updatedAt: string
 }
-
-export type ProgressStatus = 'not-started' | 'in-progress' | 'completed'

@@ -2,7 +2,7 @@
 
 /*
  * Plain :root (not @theme) on purpose: these tokens are read dynamically at
- * runtime via template strings (e.g. `var(--color-${aula.color})`), which
+ * runtime via template strings (e.g. `var(--color-brand-${n})`), which
  * Tailwind's static scanner can't see. Inside @theme, Tailwind only keeps
  * custom tokens it can statically prove are referenced, so anything not
  * discoverable that way gets silently dropped from the build — declaring
